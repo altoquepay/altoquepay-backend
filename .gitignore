@@ -1,0 +1,17 @@
+# Virtual environment and local settings
+.venv/
+.env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Tooling caches and reports
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor settings
+.vscode/
+.idea/
