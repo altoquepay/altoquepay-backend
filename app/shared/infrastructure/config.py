@@ -2,14 +2,18 @@
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+JWT_SECRET_MINIMUM_LENGTH = 32
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
-    jwt_secret: str
+    # A short secret makes tokens forgeable, so the application refuses to start with one.
+    jwt_secret: str = Field(min_length=JWT_SECRET_MINIMUM_LENGTH)
     jwt_expire_minutes: int = 60
     cors_origins: str = "http://localhost:4200"
     app_timezone: str = "America/Lima"
