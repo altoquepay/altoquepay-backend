@@ -1,0 +1,1 @@
+"""Stores bounded context."""
