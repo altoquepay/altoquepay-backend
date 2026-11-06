@@ -1,8 +1,30 @@
 """FastAPI application entry point."""
 
-from fastapi import FastAPI
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="AlToque Pay API", version="0.1.0")
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.shared.infrastructure.config import get_settings
+from app.shared.infrastructure.database import engine
+from app.shared.interfaces.rest.error_handlers import register_error_handlers
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    yield
+    await engine.dispose()
+
+
+app = FastAPI(title="AlToque Pay API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins_list,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+register_error_handlers(app)
 
 
 @app.get("/health")
