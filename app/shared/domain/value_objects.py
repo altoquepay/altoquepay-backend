@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
+from enum import StrEnum
 
 from app.shared.domain.errors import BusinessError
 
@@ -12,6 +13,12 @@ RATE_PERCENT_STEP = Decimal("0.0000001")
 # Upper bounds of the NUMERIC(12,2) and NUMERIC(12,7) database columns.
 MONEY_LIMIT = Decimal("10000000000")
 RATE_PERCENT_LIMIT = Decimal("100000")
+
+
+class Role(StrEnum):
+    SYSTEM_ADMIN = "SYSTEM_ADMIN"
+    STORE_ADMIN = "STORE_ADMIN"
+    CUSTOMER = "CUSTOMER"
 
 
 @dataclass(frozen=True)

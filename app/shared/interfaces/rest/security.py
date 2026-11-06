@@ -5,7 +5,6 @@ They read only the token claims, so no bounded context depends on the iam tables
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated
 
 import jwt
@@ -13,18 +12,13 @@ from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 
 from app.shared.domain.errors import BusinessError
+from app.shared.domain.value_objects import Role
 from app.shared.infrastructure.config import get_settings
 
 JWT_ALGORITHM = "HS256"
 REQUIRED_CLAIMS = ["exp", "sub", "role", "must_change_password"]
 
 bearer_token = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-
-
-class Role(StrEnum):
-    SYSTEM_ADMIN = "SYSTEM_ADMIN"
-    STORE_ADMIN = "STORE_ADMIN"
-    CUSTOMER = "CUSTOMER"
 
 
 @dataclass(frozen=True)
