@@ -69,7 +69,7 @@ The API starts on `http://localhost:8000` and reloads on file changes. The Swagg
 
 ### Tests and linting
 
-The integration tests need the database running.
+The integration tests need the database running. They create and migrate their own `<database>_test` database, so they never touch the data you use for manual checks.
 
 ```bash
 pytest
