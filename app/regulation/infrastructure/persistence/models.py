@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Numeric, literal_column
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, literal_column
 from sqlalchemy.dialects.postgresql import ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,5 +26,4 @@ class BcrpCapModel(Base):
     max_tea: Mapped[Decimal] = mapped_column(Numeric(12, 7))
     valid_from: Mapped[date]
     valid_to: Mapped[date]
-    # shortcut: no foreign key until the iam context creates the users table; add it then.
-    created_by: Mapped[int | None]
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
