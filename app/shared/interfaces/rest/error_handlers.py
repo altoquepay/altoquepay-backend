@@ -30,12 +30,18 @@ async def handle_business_error(_request: Request, error: BusinessError) -> JSON
     return error_response(error.status, error.code, error.message, error.field, error.details)
 
 
+def invalid_field_name(validation_error: dict[str, Any]) -> str | None:
+    # A malformed JSON body is located by a character position, which is not a field.
+    if validation_error["type"] == "json_invalid":
+        return None
+    # The first location item is the request part ("body", "query"...), not a field name.
+    return ".".join(map(str, validation_error["loc"][1:])) or None
+
+
 async def handle_validation_error(_request: Request, error: RequestValidationError) -> JSONResponse:
     # Copies only location and message: the raw errors echo the input, which may hold passwords.
-    # The first location item is the request part ("body", "query"...), not a field name.
     invalid_fields = [
-        {"field": ".".join(map(str, item["loc"][1:])) or None, "message": item["msg"]}
-        for item in error.errors()
+        {"field": invalid_field_name(item), "message": item["msg"]} for item in error.errors()
     ]
     first_invalid_field = invalid_fields[0]
     return error_response(
