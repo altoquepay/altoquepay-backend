@@ -28,17 +28,3 @@ def test_cap_must_be_greater_than_zero():
     with pytest.raises(BusinessError) as error:
         BcrpCap(Rate(Decimal("0")), date(2026, 11, 1), date(2027, 4, 30))
     assert error.value.code == "INVALID_RATE"
-
-
-@pytest.mark.parametrize(
-    ("on_date", "covered"),
-    [
-        (date(2026, 10, 31), False),
-        (date(2026, 11, 1), True),
-        (date(2027, 4, 30), True),
-        (date(2027, 5, 1), False),
-    ],
-)
-def test_validity_period_includes_its_first_and_last_day(on_date, covered):
-    cap = BcrpCap(NOVEMBER_2026_CAP, date(2026, 11, 1), date(2027, 4, 30))
-    assert cap.covers(on_date) is covered

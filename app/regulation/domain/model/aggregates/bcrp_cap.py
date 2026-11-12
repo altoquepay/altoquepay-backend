@@ -35,6 +35,3 @@ class BcrpCap:
     @property
     def max_late_tea(self) -> Rate:
         return Rate(self.max_tea.fraction * LATE_CAP_SHARE_OF_ORDINARY_CAP)
-
-    def covers(self, on_date: date) -> bool:
-        return self.valid_from <= on_date <= self.valid_to
