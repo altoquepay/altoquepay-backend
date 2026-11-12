@@ -8,8 +8,11 @@ from datetime import date
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.iam.domain.model.aggregates.user import User
+from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
 from app.main import app as application
 from app.regulation.interfaces.rest.dependencies import get_business_today
+from app.shared.domain.value_objects import Role
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from tests.authorization import authorization
@@ -25,14 +28,27 @@ class RollbackUnitOfWork(UnitOfWork):
 
 
 @pytest.fixture
-async def client():
+async def unit_of_work():
     async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
-        application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
-        transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-        application.dependency_overrides.clear()
+        yield unit_of_work
+
+
+@pytest.fixture
+async def client(unit_of_work):
+    application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
+    application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    application.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def stored_system_admin(unit_of_work) -> dict[str, str]:
+    """Headers of a system admin that exists, since bcrp_caps.created_by references users."""
+    admin = User("admin@bcrp-test.pe", "unused-hash", Role.SYSTEM_ADMIN)
+    await UserRepositoryImpl(unit_of_work.session).add(admin)
+    return authorization(sub=str(admin.id), role="SYSTEM_ADMIN", store_id=None)
 
 
 async def test_any_signed_in_user_gets_the_cap_in_force(client):
@@ -61,9 +77,13 @@ async def test_missing_cap_in_force_is_reported(client):
     assert response.json()["code"] == "NO_BCRP_CAP_IN_FORCE"
 
 
-async def test_admin_registers_the_next_cap_and_sees_it_first_in_the_history(client):
-    registered = await client.post("/api/v1/admin/bcrp-caps", json=NEXT_CAP, headers=SYSTEM_ADMIN)
-    history = await client.get("/api/v1/admin/bcrp-caps", headers=SYSTEM_ADMIN)
+async def test_admin_registers_the_next_cap_and_sees_it_first_in_the_history(
+    client, stored_system_admin
+):
+    registered = await client.post(
+        "/api/v1/admin/bcrp-caps", json=NEXT_CAP, headers=stored_system_admin
+    )
+    history = await client.get("/api/v1/admin/bcrp-caps", headers=stored_system_admin)
 
     assert registered.status_code == 201
     assert registered.json()["max_tea"] == "110.5000000"

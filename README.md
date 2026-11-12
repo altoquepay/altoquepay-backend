@@ -2,7 +2,7 @@
 
 REST API of **AlToquePay**, a web application for small neighborhood businesses (corner stores, bakeries, butcher shops, hair salons and similar) to manage the credit they grant to their customers. It is built with FastAPI and consumed by the Angular web frontend, [altoquepay-frontend](https://github.com/altoquepay/altoquepay-frontend).
 
-> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts and the `regulation` context (BCRP caps) are done; the other bounded contexts are not implemented yet.
+> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps) and the `iam` context (sign-in and passwords) are done; the other bounded contexts are not implemented yet.
 
 ## Team
 
@@ -88,8 +88,14 @@ Settings are read from environment variables, or from a `.env` file in the direc
 | `JWT_EXPIRE_MINUTES` | Lifetime of a JWT, in minutes | `60` |
 | `CORS_ORIGINS` | Comma-separated origins allowed by CORS | `http://localhost:4200` |
 | `APP_TIMEZONE` | Time zone of business dates | `America/Lima` |
-
-`.env.example` also lists the variables that the `iam` context will read once it is implemented.
+| `FIRST_ADMIN_EMAIL` | Email of the system administrator created at startup if missing; empty creates none | |
+| `FIRST_ADMIN_PASSWORD` | Initial password of that administrator, who must change it on first sign-in | |
+| `RESET_TOKEN_MINUTES` | Lifetime of a password reset link, in minutes | `30` |
+| `SMTP_HOST` | SMTP server for password reset emails; empty logs the links instead | |
+| `SMTP_PORT` | Port of the SMTP server, used with STARTTLS | `587` |
+| `SMTP_USER` | SMTP user, also the sender of the emails | |
+| `SMTP_PASSWORD` | SMTP password | |
+| `FRONTEND_URL` | Base URL of the frontend, used to build the password reset links | `http://localhost:4200` |
 
 ## Workflow
 
