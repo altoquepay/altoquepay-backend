@@ -44,6 +44,8 @@ def test_offset_skips_previous_pages():
     assert client.get("/products", params={"page": 3, "size": 10}).json()["total"] == 20
 
 
-@pytest.mark.parametrize("invalid_params", [{"page": 0}, {"size": 0}, {"size": 101}])
+@pytest.mark.parametrize(
+    "invalid_params", [{"page": 0}, {"page": 1_000_001}, {"size": 0}, {"size": 101}]
+)
 def test_rejects_out_of_range_params(invalid_params):
     assert client.get("/products", params=invalid_params).status_code == 422
