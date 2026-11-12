@@ -14,6 +14,11 @@ def test_money_rounds_half_up_to_two_decimals():
     assert Money(Decimal("0")).amount == Decimal("0.00")
 
 
+def test_money_turns_negative_zero_into_zero():
+    # Decimal("-0.00") equals Decimal("0.00"), so only the text shows the sign.
+    assert str(Money(Decimal("-0")).amount) == "0.00"
+
+
 @pytest.mark.parametrize(
     "invalid_amount",
     [Decimal("-0.01"), Decimal("NaN"), Decimal("Infinity"), Decimal("1E+10"), 350.0, "350"],
@@ -43,7 +48,8 @@ def test_rate_rounds_percent_to_seven_decimals_but_keeps_full_precision():
 
 
 @pytest.mark.parametrize(
-    "invalid_fraction", [Decimal("-0.1"), Decimal("NaN"), Decimal("1000"), 0.75]
+    "invalid_fraction",
+    [Decimal("-0.1"), Decimal("NaN"), Decimal("1000"), Decimal("9E+999999"), 0.75],
 )
 def test_rate_rejects_invalid_fractions(invalid_fraction):
     with pytest.raises(BusinessError) as error:

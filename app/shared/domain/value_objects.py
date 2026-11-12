@@ -39,7 +39,9 @@ class Money:
                 "The amount must be a non-negative number within the allowed range.",
                 field="amount",
             )
-        object.__setattr__(self, "amount", self.amount.quantize(MONEY_STEP, ROUND_HALF_UP))
+        # abs only turns -0 into 0, since negative amounts were rejected above.
+        rounded_amount = abs(self.amount).quantize(MONEY_STEP, ROUND_HALF_UP)
+        object.__setattr__(self, "amount", rounded_amount)
 
 
 @dataclass(frozen=True)
@@ -52,7 +54,8 @@ class Rate:
         if (
             not isinstance(self.fraction, Decimal)
             or not self.fraction.is_finite()
-            or not 0 <= self.fraction * 100 < RATE_PERCENT_LIMIT
+            # Dividing the limit, not multiplying the fraction, so huge fractions cannot overflow.
+            or not 0 <= self.fraction < RATE_PERCENT_LIMIT / 100
         ):
             raise BusinessError(
                 "INVALID_RATE",

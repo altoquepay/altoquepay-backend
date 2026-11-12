@@ -83,6 +83,15 @@ def test_validation_error_reports_every_field_without_echoing_the_input(client):
     assert missing_body.json()["field"] is None
 
 
+def test_malformed_json_body_names_no_field(client):
+    response = client.post(
+        "/purchases", content=b'{"store_id": 1', headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 422
+    assert (response.json()["code"], response.json()["field"]) == ("VALIDATION_ERROR", None)
+
+
 def test_http_exception_uses_the_common_format_and_keeps_headers(client):
     response = client.get("/unauthorized")
     assert response.status_code == 401

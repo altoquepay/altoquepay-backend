@@ -15,7 +15,8 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
-engine = create_async_engine(get_settings().database_url)
+# Azure closes idle connections, so test each pooled connection before handing it out.
+engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
 session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 

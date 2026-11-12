@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 class PageParams(BaseModel):
     """Use in an endpoint as ``params: Annotated[PageParams, Query()]``."""
 
-    page: int = Field(1, ge=1)
+    # Bounded so the offset always fits in a PostgreSQL bigint.
+    page: int = Field(1, ge=1, le=1_000_000)
     size: int = Field(20, ge=1, le=100)
 
     @property
