@@ -43,7 +43,8 @@ def test_rate_rounds_percent_to_seven_decimals_but_keeps_full_precision():
 
 
 @pytest.mark.parametrize(
-    "invalid_fraction", [Decimal("-0.1"), Decimal("NaN"), Decimal("1000"), 0.75]
+    "invalid_fraction",
+    [Decimal("-0.1"), Decimal("NaN"), Decimal("1000"), Decimal("9E+999999"), 0.75],
 )
 def test_rate_rejects_invalid_fractions(invalid_fraction):
     with pytest.raises(BusinessError) as error:

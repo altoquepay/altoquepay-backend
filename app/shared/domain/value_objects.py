@@ -52,7 +52,8 @@ class Rate:
         if (
             not isinstance(self.fraction, Decimal)
             or not self.fraction.is_finite()
-            or not 0 <= self.fraction * 100 < RATE_PERCENT_LIMIT
+            # Dividing the limit, not multiplying the fraction, so huge fractions cannot overflow.
+            or not 0 <= self.fraction < RATE_PERCENT_LIMIT / 100
         ):
             raise BusinessError(
                 "INVALID_RATE",
