@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.regulation.interfaces.rest.router import router as regulation_router
 from app.shared.infrastructure.config import get_settings
 from app.shared.infrastructure.database import engine
 from app.shared.interfaces.rest.error_handlers import register_error_handlers
@@ -25,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 register_error_handlers(app)
+app.include_router(regulation_router, prefix="/api/v1")
 
 
 @app.get("/health")
