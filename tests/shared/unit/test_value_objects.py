@@ -14,6 +14,11 @@ def test_money_rounds_half_up_to_two_decimals():
     assert Money(Decimal("0")).amount == Decimal("0.00")
 
 
+def test_money_turns_negative_zero_into_zero():
+    # Decimal("-0.00") equals Decimal("0.00"), so only the text shows the sign.
+    assert str(Money(Decimal("-0")).amount) == "0.00"
+
+
 @pytest.mark.parametrize(
     "invalid_amount",
     [Decimal("-0.01"), Decimal("NaN"), Decimal("Infinity"), Decimal("1E+10"), 350.0, "350"],

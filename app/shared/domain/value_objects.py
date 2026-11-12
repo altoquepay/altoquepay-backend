@@ -39,7 +39,9 @@ class Money:
                 "The amount must be a non-negative number within the allowed range.",
                 field="amount",
             )
-        object.__setattr__(self, "amount", self.amount.quantize(MONEY_STEP, ROUND_HALF_UP))
+        # abs only turns -0 into 0, since negative amounts were rejected above.
+        rounded_amount = abs(self.amount).quantize(MONEY_STEP, ROUND_HALF_UP)
+        object.__setattr__(self, "amount", rounded_amount)
 
 
 @dataclass(frozen=True)
