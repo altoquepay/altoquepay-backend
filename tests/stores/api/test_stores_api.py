@@ -225,3 +225,18 @@ async def test_store_administrator_cannot_manage_stores(client):
     assert (
         await client.patch("/api/v1/admin/stores/1/deactivate", headers=admin)
     ).status_code == 403
+
+
+async def test_deactivated_store_is_blocked_at_once_until_reactivated(client):
+    admin = await registered_admin(client)
+    store_id = (await client.get("/api/v1/store/profile", headers=admin)).json()["id"]
+
+    await client.patch(f"/api/v1/admin/stores/{store_id}/deactivate", headers=SYSTEM_ADMIN)
+    blocked_login = await login(client)
+    blocked_profile = await client.get("/api/v1/store/profile", headers=admin)
+    await client.patch(f"/api/v1/admin/stores/{store_id}/reactivate", headers=SYSTEM_ADMIN)
+
+    assert (blocked_login.status_code, blocked_login.json()["code"]) == (403, "STORE_INACTIVE")
+    assert (blocked_profile.status_code, blocked_profile.json()["code"]) == (403, "STORE_INACTIVE")
+    assert (await login(client)).status_code == 200
+    assert (await client.get("/api/v1/store/profile", headers=admin)).status_code == 200

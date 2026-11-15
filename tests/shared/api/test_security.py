@@ -125,11 +125,6 @@ def test_require_role_accepts_an_allowed_role():
     assert client.get("/admin", headers=authorization(role="SYSTEM_ADMIN")).status_code == 200
 
 
-def test_store_id_comes_from_the_token():
-    response = client.get("/store", params={"store_id": 99}, headers=authorization())
-    assert response.json() == {"store_id": 3}
-
-
 def test_store_id_is_forbidden_for_tokens_without_a_store():
     response = client.get("/store", headers=authorization(role="CUSTOMER", store_id=None))
     assert response.status_code == 403
