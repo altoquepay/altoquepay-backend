@@ -21,8 +21,7 @@ class UserModel(Base):
     full_name: Mapped[str | None] = mapped_column(String(150))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20))
-    # shortcut: no foreign key until the stores context creates the stores table; add it then.
-    store_id: Mapped[int | None]
+    store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id"))
     must_change_password: Mapped[bool]
     is_active: Mapped[bool] = mapped_column(server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
