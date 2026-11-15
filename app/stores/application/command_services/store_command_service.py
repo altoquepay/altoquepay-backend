@@ -24,6 +24,20 @@ class StoreCommandService:
         conditions = command.default_conditions
         await self._rate_caps.check(conditions.tea, conditions.late_tea, today)
         store.update_profile(command.business_name, command.address, command.phone, conditions)
+        return await self._save(store)
+
+    async def deactivate(self, store_id: int) -> Store:
+        """Block the store: its administrator can no longer sign in or keep working."""
+        store = await self._find(store_id)
+        store.deactivate()
+        return await self._save(store)
+
+    async def reactivate(self, store_id: int) -> Store:
+        store = await self._find(store_id)
+        store.reactivate()
+        return await self._save(store)
+
+    async def _save(self, store: Store) -> Store:
         await self._stores.update(store)
         await self._unit_of_work.commit()
         return store

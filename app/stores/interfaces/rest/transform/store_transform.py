@@ -1,5 +1,6 @@
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import CreditConditions, Rate, Ruc
+from app.stores.application.query_services.store_query_service import StoreWithCustomers
 from app.stores.domain.model.aggregates.store import Store
 from app.stores.domain.model.commands.register_store_command import RegisterStoreCommand
 from app.stores.domain.model.commands.update_store_profile_command import (
@@ -7,6 +8,7 @@ from app.stores.domain.model.commands.update_store_profile_command import (
 )
 from app.stores.interfaces.rest.resources.store_resources import (
     RegisterStoreResource,
+    StoreListItemResource,
     StoreResource,
     UpdateStoreProfileResource,
 )
@@ -67,4 +69,16 @@ def to_resource(store: Store) -> StoreResource:
         default_tea=conditions.tea.percent,
         default_late_tea=conditions.late_tea.percent,
         default_max_weeks=conditions.max_weeks,
+    )
+
+
+def to_list_item_resource(listed: StoreWithCustomers) -> StoreListItemResource:
+    store = to_resource(listed.store)
+    return StoreListItemResource(
+        id=store.id,
+        business_name=store.business_name,
+        ruc=store.ruc,
+        status=store.status,
+        registered_at=store.registered_at,
+        customers_count=listed.customers_count,
     )

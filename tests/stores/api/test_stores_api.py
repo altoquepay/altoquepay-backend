@@ -180,3 +180,48 @@ async def test_profile_needs_the_administrator_of_a_store(client):
 
     assert (await client.get("/api/v1/store/profile")).status_code == 401
     assert (await client.get("/api/v1/store/profile", headers=system_admin)).status_code == 403
+
+
+SYSTEM_ADMIN = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+
+
+async def test_system_admin_lists_stores_newest_first_with_their_customers(client):
+    await register(client)
+    await register(client, ruc="10456781235", email="otra@bodega-stores-test.pe")
+
+    response = await client.get("/api/v1/admin/stores?page=1&size=2", headers=SYSTEM_ADMIN)
+
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] >= 2
+    assert [store["ruc"] for store in page["items"]] == ["10456781235", "10456781234"]
+    assert page["items"][0]["customers_count"] == 0
+
+
+async def test_system_admin_deactivates_and_reactivates_a_store(client):
+    store_id = (await register(client)).json()["id"]
+
+    deactivated = await client.patch(
+        f"/api/v1/admin/stores/{store_id}/deactivate", headers=SYSTEM_ADMIN
+    )
+    reactivated = await client.patch(
+        f"/api/v1/admin/stores/{store_id}/reactivate", headers=SYSTEM_ADMIN
+    )
+
+    assert (deactivated.status_code, deactivated.json()["status"]) == (200, "INACTIVE")
+    assert (reactivated.status_code, reactivated.json()["status"]) == (200, "ACTIVE")
+
+
+async def test_unknown_store_cannot_be_deactivated(client):
+    response = await client.patch("/api/v1/admin/stores/999999/deactivate", headers=SYSTEM_ADMIN)
+
+    assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
+
+
+async def test_store_administrator_cannot_manage_stores(client):
+    admin = await registered_admin(client)
+
+    assert (await client.get("/api/v1/admin/stores", headers=admin)).status_code == 403
+    assert (
+        await client.patch("/api/v1/admin/stores/1/deactivate", headers=admin)
+    ).status_code == 403

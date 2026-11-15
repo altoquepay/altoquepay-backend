@@ -43,3 +43,12 @@ class StoreResource(BaseModel):
     default_tea: Decimal
     default_late_tea: Decimal
     default_max_weeks: int
+
+
+class StoreListItemResource(BaseModel):
+    id: int
+    business_name: str
+    ruc: str
+    status: StoreStatus
+    registered_at: datetime
+    customers_count: int
