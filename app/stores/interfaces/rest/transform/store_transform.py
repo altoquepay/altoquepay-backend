@@ -1,9 +1,14 @@
-from app.shared.domain.value_objects import Ruc
+from app.shared.domain.errors import BusinessError
+from app.shared.domain.value_objects import CreditConditions, Rate, Ruc
 from app.stores.domain.model.aggregates.store import Store
 from app.stores.domain.model.commands.register_store_command import RegisterStoreCommand
+from app.stores.domain.model.commands.update_store_profile_command import (
+    UpdateStoreProfileCommand,
+)
 from app.stores.interfaces.rest.resources.store_resources import (
     RegisterStoreResource,
     StoreResource,
+    UpdateStoreProfileResource,
 )
 
 
@@ -15,6 +20,34 @@ def to_register_command(resource: RegisterStoreResource) -> RegisterStoreCommand
         admin_email=resource.email,
         admin_password=resource.password,
     )
+
+
+def to_update_profile_command(
+    resource: UpdateStoreProfileResource, store_id: int
+) -> UpdateStoreProfileCommand:
+    return UpdateStoreProfileCommand(
+        store_id=store_id,
+        business_name=resource.business_name,
+        address=resource.address,
+        phone=resource.phone,
+        default_conditions=to_default_conditions(resource),
+    )
+
+
+def to_default_conditions(resource: UpdateStoreProfileResource) -> CreditConditions:
+    try:
+        return CreditConditions(
+            cutoff_day=resource.default_cutoff_day,
+            payment_day=resource.default_payment_day,
+            tea=Rate.from_percent(resource.default_tea),
+            late_tea=Rate.from_percent(resource.default_late_tea),
+            max_weeks=resource.default_max_weeks,
+        )
+    except BusinessError as error:
+        # CreditConditions names the fields of an account; the store profile prefixes default_.
+        if error.field is not None:
+            error.field = f"default_{error.field}"
+        raise
 
 
 def to_resource(store: Store) -> StoreResource:

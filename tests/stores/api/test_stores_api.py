@@ -12,6 +12,7 @@ from app.main import app as application
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_today
+from tests.authorization import authorization
 
 REGISTRATION = {
     "business_name": "Bodega La Esquina",
@@ -46,6 +47,25 @@ async def login(client, email: str = REGISTRATION["email"]):
     return await client.post(
         "/api/v1/auth/login", data={"username": email, "password": REGISTRATION["password"]}
     )
+
+
+async def registered_admin(client, **overrides) -> dict[str, str]:
+    """Register a store and return the headers of its signed-in administrator."""
+    await register(client, **overrides)
+    signed_in = await login(client, overrides.get("email", REGISTRATION["email"]))
+    return {"Authorization": f"Bearer {signed_in.json()['access_token']}"}
+
+
+PROFILE = {
+    "business_name": "Bodega Don Lucho",
+    "address": "Av. Los Jardines 123, SJL",
+    "phone": "987654321",
+    "default_cutoff_day": 20,
+    "default_payment_day": 26,
+    "default_tea": "114.68",
+    "default_late_tea": "17.202",
+    "default_max_weeks": 8,
+}
 
 
 async def test_registered_store_starts_with_the_initial_conditions(client):
@@ -104,3 +124,59 @@ async def test_repeated_ruc_or_email_is_rejected(client):
 
     assert (repeated_ruc.status_code, repeated_ruc.json()["code"]) == (409, "RUC_TAKEN")
     assert (repeated_email.status_code, repeated_email.json()["code"]) == (409, "EMAIL_TAKEN")
+
+
+async def test_administrator_reads_and_updates_their_store_profile(client):
+    admin = await registered_admin(client)
+
+    updated = await client.put("/api/v1/store/profile", json=PROFILE, headers=admin)
+    profile = await client.get("/api/v1/store/profile", headers=admin)
+
+    assert updated.status_code == 200
+    assert profile.json() == updated.json()
+    assert profile.json()["ruc"] == REGISTRATION["ruc"]
+    assert {key: profile.json()[key] for key in PROFILE} == PROFILE | {
+        "default_tea": "114.6800000",
+        "default_late_tea": "17.2020000",
+    }
+
+
+async def test_each_administrator_sees_only_their_own_store(client):
+    first = await registered_admin(client)
+    second = await registered_admin(client, ruc="10456781235", email="otra@bodega-stores-test.pe")
+
+    first_profile = await client.get("/api/v1/store/profile", headers=first)
+    second_profile = await client.get("/api/v1/store/profile", headers=second)
+
+    assert first_profile.json()["ruc"] == "10456781234"
+    assert second_profile.json()["ruc"] == "10456781235"
+
+
+@pytest.mark.parametrize(
+    ("invalid_values", "code", "field"),
+    [
+        ({"default_cutoff_day": 26}, "INVALID_DAY_RANGE", "default_cutoff_day"),
+        ({"default_payment_day": 29}, "INVALID_DAY_RANGE", "default_payment_day"),
+        ({"default_payment_day": 20}, "PAYMENT_DAY_NOT_AFTER_CUTOFF", "default_payment_day"),
+        ({"default_max_weeks": 100}, "INVALID_MAX_WEEKS", "default_max_weeks"),
+        ({"default_tea": "114.69"}, "RATE_ABOVE_BCRP_CAP", "default_tea"),
+        ({"default_late_tea": "17.21"}, "RATE_ABOVE_BCRP_CAP", "default_late_tea"),
+        ({"default_tea": "-1"}, "VALIDATION_ERROR", "default_tea"),
+    ],
+)
+async def test_invalid_profile_is_rejected_on_its_field(client, invalid_values, code, field):
+    admin = await registered_admin(client)
+
+    response = await client.put(
+        "/api/v1/store/profile", json=PROFILE | invalid_values, headers=admin
+    )
+
+    assert response.status_code == 422
+    assert (response.json()["code"], response.json()["field"]) == (code, field)
+
+
+async def test_profile_needs_the_administrator_of_a_store(client):
+    system_admin = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+
+    assert (await client.get("/api/v1/store/profile")).status_code == 401
+    assert (await client.get("/api/v1/store/profile", headers=system_admin)).status_code == 403
