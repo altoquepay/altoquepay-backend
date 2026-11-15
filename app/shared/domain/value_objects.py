@@ -94,3 +94,47 @@ class Ruc:
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[0-9]{11}", self.value):
             raise BusinessError("INVALID_RUC", "The RUC must have 11 digits.", field="ruc")
+
+
+CUTOFF_DAYS = range(1, 26)
+PAYMENT_DAYS = range(1, 29)
+MAX_WEEKS = range(1, 100)
+
+
+@dataclass(frozen=True)
+class CreditConditions:
+    """The terms a store gives on credit: monthly cycle days, annual rates and weekly term.
+
+    Days stop at 25 and 28 so they exist in every month, February included.
+    """
+
+    cutoff_day: int
+    payment_day: int
+    tea: Rate
+    late_tea: Rate
+    max_weeks: int
+
+    def __post_init__(self) -> None:
+        if self.cutoff_day not in CUTOFF_DAYS:
+            raise BusinessError(
+                "INVALID_DAY_RANGE", "The cutoff day must be between 1 and 25.", field="cutoff_day"
+            )
+        if self.payment_day not in PAYMENT_DAYS:
+            raise BusinessError(
+                "INVALID_DAY_RANGE",
+                "The payment day must be between 1 and 28.",
+                field="payment_day",
+            )
+        # The days in between let the store close the cycle and send the statement.
+        if self.payment_day <= self.cutoff_day:
+            raise BusinessError(
+                "PAYMENT_DAY_NOT_AFTER_CUTOFF",
+                "The payment day must be after the cutoff day.",
+                field="payment_day",
+            )
+        if self.max_weeks not in MAX_WEEKS:
+            raise BusinessError(
+                "INVALID_MAX_WEEKS",
+                "The maximum number of weeks must be between 1 and 99.",
+                field="max_weeks",
+            )
