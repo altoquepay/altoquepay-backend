@@ -11,10 +11,10 @@ from httpx import ASGITransport, AsyncClient
 from app.iam.domain.model.aggregates.user import User
 from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
 from app.main import app as application
-from app.regulation.interfaces.rest.dependencies import get_business_today
 from app.shared.domain.value_objects import Role
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.interfaces.rest.business_date import get_business_today
 from tests.authorization import authorization
 
 SYSTEM_ADMIN = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)

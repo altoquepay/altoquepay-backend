@@ -12,7 +12,6 @@ from app.regulation.application.query_services.bcrp_cap_query_service import (
 from app.regulation.interfaces.rest.dependencies import (
     get_bcrp_cap_command_service,
     get_bcrp_cap_query_service,
-    get_business_today,
 )
 from app.regulation.interfaces.rest.resources.bcrp_cap_resources import (
     BcrpCapResource,
@@ -23,6 +22,7 @@ from app.regulation.interfaces.rest.transform.bcrp_cap_transform import (
     to_resource,
 )
 from app.shared.domain.value_objects import Role
+from app.shared.interfaces.rest.business_date import get_business_today
 from app.shared.interfaces.rest.security import CurrentUser, get_current_user, require_role
 
 router = APIRouter(tags=["BCRP caps"])

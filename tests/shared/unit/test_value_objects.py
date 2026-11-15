@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from app.shared.domain.errors import BusinessError
-from app.shared.domain.value_objects import Dni, Money, Rate, Ruc
+from app.shared.domain.value_objects import CreditConditions, Dni, Money, Rate, Ruc
 
 
 def test_money_rounds_half_up_to_two_decimals():
@@ -77,3 +77,37 @@ def test_ruc_requires_eleven_digits(invalid_ruc):
     with pytest.raises(BusinessError) as error:
         Ruc(invalid_ruc)
     assert error.value.code == "INVALID_RUC"
+
+
+def credit_conditions(**overrides) -> CreditConditions:
+    values = {
+        "cutoff_day": 10,
+        "payment_day": 15,
+        "tea": Rate.from_percent(Decimal("40")),
+        "late_tea": Rate.from_percent(Decimal("15")),
+        "max_weeks": 4,
+    } | overrides
+    return CreditConditions(**values)
+
+
+def test_credit_conditions_accept_the_edges_of_each_range():
+    assert credit_conditions(cutoff_day=1, payment_day=2, max_weeks=1).cutoff_day == 1
+    assert credit_conditions(cutoff_day=25, payment_day=28, max_weeks=99).payment_day == 28
+
+
+@pytest.mark.parametrize(
+    ("invalid_values", "code", "field"),
+    [
+        ({"cutoff_day": 0}, "INVALID_DAY_RANGE", "cutoff_day"),
+        ({"cutoff_day": 26, "payment_day": 28}, "INVALID_DAY_RANGE", "cutoff_day"),
+        ({"payment_day": 0}, "INVALID_DAY_RANGE", "payment_day"),
+        ({"payment_day": 29}, "INVALID_DAY_RANGE", "payment_day"),
+        ({"payment_day": 10}, "PAYMENT_DAY_NOT_AFTER_CUTOFF", "payment_day"),
+        ({"max_weeks": 0}, "INVALID_MAX_WEEKS", "max_weeks"),
+        ({"max_weeks": 100}, "INVALID_MAX_WEEKS", "max_weeks"),
+    ],
+)
+def test_credit_conditions_reject_values_out_of_range(invalid_values, code, field):
+    with pytest.raises(BusinessError) as error:
+        credit_conditions(**invalid_values)
+    assert (error.value.code, error.value.field) == (code, field)

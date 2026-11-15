@@ -12,6 +12,7 @@ from app.regulation.interfaces.rest.router import router as regulation_router
 from app.shared.infrastructure.config import get_settings
 from app.shared.infrastructure.database import engine
 from app.shared.interfaces.rest.error_handlers import register_error_handlers
+from app.stores.interfaces.rest.router import router as stores_router
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ app.add_middleware(
 register_error_handlers(app)
 app.include_router(iam_router, prefix="/api/v1")
 app.include_router(regulation_router, prefix="/api/v1")
+app.include_router(stores_router, prefix="/api/v1")
 
 
 @app.get("/health")

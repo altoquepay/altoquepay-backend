@@ -15,6 +15,7 @@ from app.main import app as application
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from tests.iam.fakes import RecordingNotifier
+from tests.stored_store import add_store
 
 ADMIN_EMAIL = "rosa@bodega-test.pe"
 ADMIN_PASSWORD = "clave-de-rosa"
@@ -53,9 +54,14 @@ async def client(unit_of_work, notifier, monkeypatch):
 
 
 @pytest.fixture
-async def store_admin_id(unit_of_work):
+async def store_id(unit_of_work) -> int:
+    return (await add_store(unit_of_work)).id
+
+
+@pytest.fixture
+async def store_admin_id(unit_of_work, store_id):
     return await IamFacade(unit_of_work).create_store_admin(
-        ADMIN_EMAIL, "Rosa Quispe", ADMIN_PASSWORD, store_id=3
+        ADMIN_EMAIL, "Rosa Quispe", ADMIN_PASSWORD, store_id=store_id
     )
 
 
@@ -74,7 +80,7 @@ def bearer(response) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
-async def test_store_admin_signs_in_and_reads_their_profile(client, store_admin_id):
+async def test_store_admin_signs_in_and_reads_their_profile(client, store_admin_id, store_id):
     signed_in = await login(client, ADMIN_EMAIL.upper(), ADMIN_PASSWORD)
     me = await client.get("/api/v1/auth/me", headers=bearer(signed_in))
 
@@ -90,7 +96,7 @@ async def test_store_admin_signs_in_and_reads_their_profile(client, store_admin_
         "username": ADMIN_EMAIL,
         "full_name": "Rosa Quispe",
         "role": "STORE_ADMIN",
-        "store_id": 3,
+        "store_id": store_id,
         "customer_id": None,
         "must_change_password": False,
     }

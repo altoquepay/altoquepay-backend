@@ -1,8 +1,8 @@
 # altoquepay-backend
 
-REST API of **AlToquePay**, a web application for small neighborhood businesses (corner stores, bakeries, butcher shops, hair salons and similar) to manage the credit they grant to their customers. It is built with FastAPI and consumed by the Angular web frontend, [altoquepay-frontend](https://github.com/altoquepay/altoquepay-frontend).
+REST API of **AlToquePay**, a web application for neighborhood corner stores (*bodegas*) to manage the credit they grant to their customers. It is built with FastAPI and consumed by the Angular web frontend, [altoquepay-frontend](https://github.com/altoquepay/altoquepay-frontend).
 
-> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps) and the `iam` context (sign-in and passwords) are done; the other bounded contexts are not implemented yet.
+> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps), the `iam` context (sign-in and passwords) and the `stores` context (store registration, profile and administration) are done; the other bounded contexts are not implemented yet.
 
 ## Team
 

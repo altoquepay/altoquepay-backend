@@ -9,10 +9,5 @@ class ExternalStores(StoreDirectory):
         self._stores_facade = stores_facade
 
     async def is_store_active(self, store_id: int) -> bool:
-        try:
-            store = await self._stores_facade.get_store_status(store_id)
-        except NotImplementedError:
-            # shortcut: the stores context is not built yet, so every store counts as active;
-            # remove this once StoresFacade.get_store_status is implemented.
-            return True
+        store = await self._stores_facade.get_store_status(store_id)
         return store.status == ACTIVE_STORE_STATUS

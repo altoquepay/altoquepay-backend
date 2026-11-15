@@ -9,12 +9,18 @@ from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Role
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork
+from tests.stored_store import add_store
 
 
 @pytest.fixture
 async def unit_of_work():
     async with UnitOfWork(session_factory) as unit_of_work:
         yield unit_of_work
+
+
+@pytest.fixture
+async def store_id(unit_of_work) -> int:
+    return (await add_store(unit_of_work)).id
 
 
 @pytest.fixture
@@ -28,9 +34,9 @@ async def stored_password_hash(unit_of_work, user_id: int) -> str:
     return user.password_hash
 
 
-async def test_store_admin_is_created_with_a_hashed_password(facade, unit_of_work):
+async def test_store_admin_is_created_with_a_hashed_password(facade, unit_of_work, store_id):
     user_id = await facade.create_store_admin(
-        "Rosa@Bodega-Test.pe", "Rosa Quispe", "clave-de-rosa", store_id=3
+        "Rosa@Bodega-Test.pe", "Rosa Quispe", "clave-de-rosa", store_id
     )
 
     summary = await facade.find_user_by_username("rosa@bodega-test.pe")
@@ -40,11 +46,11 @@ async def test_store_admin_is_created_with_a_hashed_password(facade, unit_of_wor
     assert (await Argon2PasswordHasher().verify("clave-de-rosa", password_hash))[0]
 
 
-async def test_repeated_email_is_rejected(facade):
-    await facade.create_store_admin("rosa@bodega-test.pe", "Rosa", "clave-de-rosa", store_id=3)
+async def test_repeated_email_is_rejected(facade, store_id):
+    await facade.create_store_admin("rosa@bodega-test.pe", "Rosa", "clave-de-rosa", store_id)
 
     with pytest.raises(BusinessError) as error:
-        await facade.create_store_admin("ROSA@bodega-test.pe", "Otra", "otra-clave", store_id=4)
+        await facade.create_store_admin("ROSA@bodega-test.pe", "Otra", "otra-clave", store_id)
 
     assert (error.value.code, error.value.status, error.value.field) == (
         "EMAIL_TAKEN",
