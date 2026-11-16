@@ -10,7 +10,7 @@ from app.credit.interfaces.acl.credit_facade import CreditFacade
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork
-from tests.credit.stored_credit import LIMA, add_credit_setup, add_purchase
+from tests.credit.stored_credit import LIMA, add_credit_setup, add_payment, add_purchase
 
 
 @pytest.fixture
@@ -38,7 +38,9 @@ async def test_outstanding_principal_counts_unpaid_amounts_and_installment_princ
     await add_single_date(unit_of_work, setup, quantity=2)
 
     before = await facade.get_outstanding_principal(setup.account_id)
-    await facade.mark_installment_paid(weekly.installments[0].id, payment_id=1)
+    first_id = weekly.installments[0].id
+    payment_id = await add_payment(unit_of_work, setup, installment_id=first_id)
+    await facade.mark_installment_paid(first_id, payment_id=payment_id)
     after = await facade.get_outstanding_principal(setup.account_id)
 
     # 426.99 capitalized plus 200.00, then minus the first amortization of 105.01.
@@ -76,7 +78,8 @@ async def test_paying_the_last_installment_pays_the_purchase(unit_of_work, setup
     weekly = await add_purchase(unit_of_work, setup)
 
     for installment in weekly.installments:
-        await facade.mark_installment_paid(installment.id, payment_id=installment.number)
+        payment_id = await add_payment(unit_of_work, setup, installment_id=installment.id)
+        await facade.mark_installment_paid(installment.id, payment_id=payment_id)
 
     assert (await facade.get_purchase(weekly.id)).status == "PAID"
     with pytest.raises(BusinessError) as error:
@@ -89,8 +92,10 @@ async def test_single_date_purchase_is_paid_and_weekly_one_prepaid(unit_of_work,
     weekly = await add_purchase(unit_of_work, setup)
     single_date = await add_single_date(unit_of_work, setup)
 
-    await facade.mark_purchase_paid(single_date.id, payment_id=1)
-    await facade.cancel_remaining_installments(weekly.id, payment_id=2)
+    single_payment = await add_payment(unit_of_work, setup, purchase_id=single_date.id)
+    prepayment = await add_payment(unit_of_work, setup, purchase_id=weekly.id)
+    await facade.mark_purchase_paid(single_date.id, payment_id=single_payment)
+    await facade.cancel_remaining_installments(weekly.id, payment_id=prepayment)
 
     assert (await facade.get_purchase(single_date.id)).status == "PAID"
     assert (await facade.get_purchase(weekly.id)).status == "PREPAID"

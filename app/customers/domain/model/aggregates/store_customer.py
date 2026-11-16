@@ -30,3 +30,11 @@ class StoreCustomer:
     @property
     def is_active(self) -> bool:
         return self.status == AccountStatus.ACTIVE
+
+    def update_terms(self, credit_limit: Money, conditions: CreditConditions) -> None:
+        """New terms apply to new purchases; registered ones keep the rates they were made with."""
+        self.credit_limit = credit_limit
+        self.conditions = conditions
+
+    def deactivate(self) -> None:
+        self.status = AccountStatus.INACTIVE

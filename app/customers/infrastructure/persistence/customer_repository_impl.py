@@ -3,13 +3,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.repositories.customer_repository import CustomerRepository
-from app.customers.infrastructure.persistence.mappers import customer_to_model
+from app.customers.infrastructure.persistence.mappers import (
+    copy_customer_to_model,
+    customer_to_domain,
+)
 from app.customers.infrastructure.persistence.models import CustomerModel
+from app.shared.domain.value_objects import Dni
 
 
 class CustomerRepositoryImpl(CustomerRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def find_by_id(self, customer_id: int) -> Customer | None:
+        model = await self._session.get(CustomerModel, customer_id)
+        return customer_to_domain(model) if model else None
+
+    async def find_by_dni(self, dni: Dni) -> Customer | None:
+        model = await self._session.scalar(
+            select(CustomerModel).where(CustomerModel.dni == dni.value)
+        )
+        return customer_to_domain(model) if model else None
 
     async def find_id_by_user(self, user_id: int) -> int | None:
         return await self._session.scalar(
@@ -17,7 +31,14 @@ class CustomerRepositoryImpl(CustomerRepository):
         )
 
     async def add(self, customer: Customer) -> None:
-        model = customer_to_model(customer)
+        model = copy_customer_to_model(customer, CustomerModel())
         self._session.add(model)
         await self._session.flush()
         customer.id = model.id
+
+    async def update(self, customer: Customer) -> None:
+        if customer.id is None:
+            raise ValueError("Only a stored customer can be updated.")
+        model = await self._session.get_one(CustomerModel, customer.id)
+        copy_customer_to_model(customer, model)
+        await self._session.flush()

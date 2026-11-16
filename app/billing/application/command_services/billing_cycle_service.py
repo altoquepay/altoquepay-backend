@@ -30,11 +30,11 @@ class BillingCycleService:
             raise ValueError("purchased_at must have a time zone.")
         # The cutoff ends at midnight in the store's time zone, not the server's.
         purchase_day = purchased_at.astimezone(self._business_time_zone).date()
-        days = await self._accounts.get_cycle_days(account_id)
-        period = cycle_period_of(purchase_day, days.cutoff_day, days.payment_day)
+        account = await self._accounts.get_account(account_id)
+        period = cycle_period_of(purchase_day, account.cutoff_day, account.payment_day)
         cycle = await self._cycles.find(account_id, period.year, period.month)
         if cycle is None:
-            cycle = BillingCycle.open(account_id, period)
+            cycle = BillingCycle.open(account_id, account.store_id, period)
             await self._cycles.add(cycle)
         elif not cycle.is_open:
             raise BusinessError(

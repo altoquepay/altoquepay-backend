@@ -19,6 +19,7 @@ from tests.credit.stored_credit import (
     DUE_DATES_OF_TEST_3,
     LIMA,
     add_credit_setup,
+    add_payment,
     add_purchase,
 )
 
@@ -47,16 +48,18 @@ async def test_paying_installments_is_saved(unit_of_work):
     purchase = await add_purchase(unit_of_work, setup)
     first, second = purchase.installments[0].id, purchase.installments[1].id
 
-    purchase.mark_installment_paid(first, payment_id=900)
-    purchase.cancel_remaining_installments(payment_id=901)
+    paid = await add_payment(unit_of_work, setup, installment_id=first)
+    prepaid = await add_payment(unit_of_work, setup, purchase_id=purchase.id)
+    purchase.mark_installment_paid(first, payment_id=paid)
+    purchase.cancel_remaining_installments(payment_id=prepaid)
     await repository.update(purchase)
     unit_of_work.session.expunge_all()
     stored = await repository.find_by_installment(second)
 
     assert stored.status == PurchaseStatus.PREPAID
     assert [(i.status, i.payment_id) for i in stored.installments][:2] == [
-        (InstallmentStatus.PAID, 900),
-        (InstallmentStatus.CANCELLED, 901),
+        (InstallmentStatus.PAID, paid),
+        (InstallmentStatus.CANCELLED, prepaid),
     ]
     assert await repository.list_active_by_account(setup.account_id) == []
 

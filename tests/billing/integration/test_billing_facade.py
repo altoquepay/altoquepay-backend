@@ -14,6 +14,7 @@ from app.billing.infrastructure.persistence.billing_cycle_repository_impl import
     BillingCycleRepositoryImpl,
 )
 from app.billing.interfaces.acl.billing_facade import BillingFacade, CycleReference
+from app.customers.interfaces.acl.customers_facade import CustomersFacade
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork
@@ -81,7 +82,8 @@ async def test_same_cycle_is_returned_twice(unit_of_work):
 async def test_purchase_in_a_closed_cycle_is_rejected(unit_of_work):
     account_id = await new_account(unit_of_work, 20, 26)
     period = cycle_period_of(date(2026, 9, 15), 20, 26)
-    closed = BillingCycle.open(account_id, period)
+    store_id = (await CustomersFacade(unit_of_work).get_credit_terms(account_id)).store_id
+    closed = BillingCycle.open(account_id, store_id, period)
     closed.status = CycleStatus.CLOSED
     await BillingCycleRepositoryImpl(unit_of_work.session).add(closed)
 

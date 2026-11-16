@@ -20,17 +20,16 @@ def to_domain(model: ProductModel) -> Product:
     )
 
 
-def to_model(product: Product) -> ProductModel:
-    return ProductModel(
-        store_id=product.store_id,
-        code=product.code,
-        description=product.description,
-        brand=product.brand,
-        category=product.category,
-        unit=product.unit,
-        cash_price=product.cash_price.amount,
-        list_price=product.list_price.amount,
-        supplier=product.supplier,
-        image_url=product.image_url,
-        is_active=product.is_active,
-    )
+def copy_to_model(product: Product, model: ProductModel) -> ProductModel:
+    model.store_id = product.store_id
+    model.code = product.code
+    model.description = product.description
+    model.brand = product.brand
+    model.category = product.category
+    model.unit = product.unit
+    model.cash_price = product.cash_price.amount
+    model.list_price = product.list_price.amount
+    model.supplier = product.supplier
+    model.image_url = product.image_url
+    model.is_active = product.is_active
+    return model

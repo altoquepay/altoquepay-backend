@@ -5,6 +5,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from app.billing.domain.model.aggregates.payment import Payment, PaymentBreakdown, PaymentKind
+from app.billing.infrastructure.persistence.payment_repository_impl import PaymentRepositoryImpl
 from app.billing.interfaces.acl.billing_facade import BillingFacade
 from app.catalog.domain.model.aggregates.product import Product
 from app.catalog.infrastructure.persistence.product_repository_impl import ProductRepositoryImpl
@@ -88,3 +90,27 @@ DUE_DATES_OF_TEST_3 = [
     date(2026, 12, 17),
     date(2026, 12, 24),
 ]
+
+
+async def add_payment(
+    unit_of_work: UnitOfWork,
+    setup: CreditSetup,
+    *,
+    installment_id: int | None = None,
+    purchase_id: int | None = None,
+) -> int:
+    """Flush a payment of zero to reference when marking an installment or purchase as paid."""
+    zero = Money(Decimal(0))
+    payment = Payment(
+        store_id=setup.store_id,
+        account_id=setup.account_id,
+        kind=PaymentKind.INSTALLMENT if installment_id else PaymentKind.SINGLE_DATE_EARLY,
+        paid_on=date(2026, 12, 3),
+        breakdown=PaymentBreakdown(zero, zero, zero),
+        created_by=setup.user_id,
+        installment_id=installment_id,
+        purchase_id=purchase_id,
+    )
+    await PaymentRepositoryImpl(unit_of_work.session).add(payment)
+    assert payment.id is not None
+    return payment.id
