@@ -2,7 +2,7 @@
 
 REST API of **AlToquePay**, a web application for neighborhood corner stores (*bodegas*) to manage the credit they grant to their customers. It is built with FastAPI and consumed by the Angular web frontend, [altoquepay-frontend](https://github.com/altoquepay/altoquepay-frontend).
 
-> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps), the `iam` context (sign-in and passwords), the `stores` context (store registration, profile and administration) and the `credit` context (purchases, weekly French schedules and installments) are done. The `customers`, `catalog` and `billing` contexts have their tables and the facade methods that credit uses, but no endpoints yet; `reporting` is not implemented yet.
+> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps), the `iam` context (sign-in and passwords), the `stores` context (store registration, profile and administration), the `catalog` context (products and their images) and the `credit` context (purchases, weekly French schedules and installments) are done. The `customers` and `billing` contexts have their tables and the facade methods that credit uses, but no endpoints yet; `reporting` is not implemented yet.
 
 ## Team
 
@@ -96,6 +96,7 @@ Settings are read from environment variables, or from a `.env` file in the direc
 | `SMTP_USER` | SMTP user, also the sender of the emails | |
 | `SMTP_PASSWORD` | SMTP password | |
 | `FRONTEND_URL` | Base URL of the frontend, used to build the password reset links | `http://localhost:4200` |
+| `MEDIA_DIR` | Folder for uploaded files such as product images, served under `/media` | `media` |
 
 ## Workflow
 
