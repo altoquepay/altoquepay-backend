@@ -105,3 +105,11 @@ Settings are read from environment variables, or from a `.env` file in the direc
   - `feature/*`, `release/*`, `hotfix/*`: short-lived branches merged by pull request
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 - **Versioning:** [Semantic Versioning](https://semver.org/)
+
+## Changelog
+
+Notable changes are documented in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md).
