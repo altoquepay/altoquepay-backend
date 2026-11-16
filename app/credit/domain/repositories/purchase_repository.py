@@ -56,6 +56,13 @@ class PurchaseRepository(ABC):
     async def list_by_cycle(self, cycle_id: int) -> list[Purchase]: ...
 
     @abstractmethod
+    async def list_by_store(self, store_id: int, purchase_filter: PurchaseFilter) -> list[Purchase]:
+        """Return every purchase of the store that passes the filter, most recent first."""
+
+    @abstractmethod
+    async def list_active_by_store(self, store_id: int) -> list[Purchase]: ...
+
+    @abstractmethod
     async def list_page(
         self, store_id: int, purchase_filter: PurchaseFilter, offset: int, size: int
     ) -> tuple[list[Purchase], int]:
@@ -81,6 +88,12 @@ class PurchaseRepository(ABC):
         self, account_id: int, from_date: date, to_date: date
     ) -> list[InstallmentEntry]:
         """Return the pending installments due within the inclusive range, by due date."""
+
+    @abstractmethod
+    async def list_store_installments_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[InstallmentEntry]:
+        """Return the store's pending installments due within the inclusive range, by due date."""
 
     @abstractmethod
     async def find_installment(self, installment_id: int) -> InstallmentEntry | None: ...
