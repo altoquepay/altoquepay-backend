@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.catalog.domain.model.aggregates.product import Product
+from app.catalog.domain.model.aggregates.product import Product, ProductDetails
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Money
 
@@ -48,3 +48,27 @@ def test_deactivated_product_is_kept_but_inactive():
     created.deactivate()
 
     assert not created.is_active
+
+
+def test_update_replaces_the_details_and_validates_again():
+    created = product()
+    details = ProductDetails(
+        code="ARR-1",
+        description="Arroz extra 1 kg",
+        brand="Costeño",
+        category="Abarrotes",
+        unit="bolsa",
+        cash_price=Money(Decimal("4.50")),
+        list_price=Money(Decimal("4.90")),
+        supplier=" Distribuidora Lima ",
+    )
+
+    created.update(details)
+
+    assert (created.code, created.list_price, created.supplier) == (
+        "ARR-1",
+        Money(Decimal("4.90")),
+        "Distribuidora Lima",
+    )
+    with pytest.raises(BusinessError):
+        created.update(ProductDetails("", "x", "x", "x", "x", Money(Decimal(1)), Money(Decimal(1))))

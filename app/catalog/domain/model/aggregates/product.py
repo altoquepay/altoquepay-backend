@@ -45,8 +45,51 @@ class Product:
                 raise invalid_text(field, 0, maximum)
             setattr(self, field, text)
 
+    def update(self, details: "ProductDetails") -> None:
+        """Change what may be edited. Purchases already registered keep the price they copied."""
+        self.code = details.code
+        self.description = details.description
+        self.brand = details.brand
+        self.category = details.category
+        self.unit = details.unit
+        self.cash_price = details.cash_price
+        self.list_price = details.list_price
+        self.supplier = details.supplier
+        self.__post_init__()
+
+    def change_image(self, image_url: str) -> None:
+        self.image_url = image_url
+        self.__post_init__()
+
     def deactivate(self) -> None:
         self.is_active = False
+
+
+@dataclass(frozen=True)
+class ProductDetails:
+    """What a store fills in to create or edit a product."""
+
+    code: str
+    description: str
+    brand: str
+    category: str
+    unit: str
+    cash_price: Money
+    list_price: Money
+    supplier: str | None = None
+
+    def new_product(self, store_id: int) -> Product:
+        return Product(
+            store_id=store_id,
+            code=self.code,
+            description=self.description,
+            brand=self.brand,
+            category=self.category,
+            unit=self.unit,
+            cash_price=self.cash_price,
+            list_price=self.list_price,
+            supplier=self.supplier,
+        )
 
 
 def invalid_text(field: str, minimum: int, maximum: int) -> BusinessError:
