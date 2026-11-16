@@ -108,3 +108,21 @@ async def test_customer_of_a_user(facade, unit_of_work):
     with pytest.raises(BusinessError) as error:
         await facade.get_customer_id_by_user(999_999)
     assert (error.value.code, error.value.status) == ("NOT_FOUND", 404)
+
+
+async def test_accounts_of_a_store_include_inactive_ones_and_no_other_store(facade, unit_of_work):
+    store = await add_store(unit_of_work)
+    other_store = await add_store(unit_of_work, ruc="20999999991")
+    rosa = await add_customer(unit_of_work)
+    luis = await add_customer(unit_of_work, dni="70000002")
+    first = await add_account(unit_of_work, store.id, rosa.id)
+    second = await add_account(unit_of_work, store.id, luis.id, status=AccountStatus.INACTIVE)
+    await add_account(unit_of_work, other_store.id, rosa.id)
+
+    accounts = await facade.list_accounts_of_store(store.id)
+
+    assert accounts == [
+        AccountSummary(first.id, store.id, "ACTIVE"),
+        AccountSummary(second.id, store.id, "INACTIVE"),
+    ]
+    assert await facade.list_accounts_of_store(999_999) == []
