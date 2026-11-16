@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.credit.interfaces.rest.router import router as credit_router
 from app.iam.infrastructure.first_admin import create_first_system_admin
 from app.iam.interfaces.rest.router import router as iam_router
 from app.regulation.interfaces.rest.router import router as regulation_router
@@ -33,6 +34,7 @@ register_error_handlers(app)
 app.include_router(iam_router, prefix="/api/v1")
 app.include_router(regulation_router, prefix="/api/v1")
 app.include_router(stores_router, prefix="/api/v1")
+app.include_router(credit_router, prefix="/api/v1")
 
 
 @app.get("/health")

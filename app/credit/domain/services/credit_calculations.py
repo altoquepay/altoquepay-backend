@@ -1,0 +1,64 @@
+"""The credit calculations of the report: single date interest, total grace and French schedule.
+
+Every amount is rounded to cents as soon as it is produced, so what is stored is what is charged.
+"""
+
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from app.shared.domain.finance import INSTALLMENT_PERIOD_DAYS, te7d, tep
+from app.shared.domain.value_objects import Money, Rate
+
+
+@dataclass(frozen=True)
+class ScheduleRow:
+    number: int
+    due_date: date
+    opening_balance: Money
+    interest: Money
+    amortization: Money
+    amount: Money
+    closing_balance: Money
+
+
+def interest_over(amount: Money, tea: Rate, days: int) -> Money:
+    """Return the interest of an amount over a number of days, as in a single date purchase."""
+    return Money(amount.amount * tep(tea, days))
+
+
+def capitalize(amount: Money, tea: Rate, days: int) -> Money:
+    """Return the debt after a total grace period (Sg): its interest is added to the amount."""
+    return Money(amount.amount * (1 + tep(tea, days)))
+
+
+def french_schedule(
+    principal: Money, tea: Rate, count: int, cycle_payment_date: date
+) -> list[ScheduleRow]:
+    """Return the constant weekly installments, the k-th due on the cycle payment date + 7k days.
+
+    Each interest is rounded to cents and the amortization is the installment minus it. The last
+    installment amortizes whatever is left, so it may differ from the others by a few cents.
+    """
+    rate = te7d(tea)
+    if rate:
+        installment = Money(principal.amount * rate / (1 - (1 + rate) ** -count)).amount
+    else:
+        installment = Money(principal.amount / count).amount
+    rows = []
+    balance = principal.amount
+    for number in range(1, count + 1):
+        interest = Money(balance * rate).amount
+        amortization = balance if number == count else installment - interest
+        rows.append(
+            ScheduleRow(
+                number=number,
+                due_date=cycle_payment_date + timedelta(days=INSTALLMENT_PERIOD_DAYS * number),
+                opening_balance=Money(balance),
+                interest=Money(interest),
+                amortization=Money(amortization),
+                amount=Money(interest + amortization),
+                closing_balance=Money(balance - amortization),
+            )
+        )
+        balance -= amortization
+    return rows
