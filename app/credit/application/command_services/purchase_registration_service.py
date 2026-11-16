@@ -4,7 +4,11 @@ from decimal import Decimal
 from app.credit.application.ports.credit_accounts import CreditAccounts
 from app.credit.application.ports.cycle_assigner import CycleAssigner
 from app.credit.application.ports.product_prices import ProductPrices
-from app.credit.domain.model.aggregates.purchase import Purchase, PurchaseItem
+from app.credit.domain.model.aggregates.purchase import (
+    Purchase,
+    PurchaseItem,
+    outstanding_principal_of,
+)
 from app.credit.domain.model.commands.register_purchase_command import RegisterPurchaseCommand
 from app.credit.domain.repositories.purchase_repository import PurchaseRepository
 from app.shared.domain.errors import BusinessError
@@ -64,7 +68,8 @@ class PurchaseRegistrationService:
             max_weeks=terms.max_weeks,
             created_by=command.created_by,
         )
-        available = terms.credit_limit.amount - await self._outstanding(command.account_id)
+        active = await self._purchases.list_active_by_account(command.account_id)
+        available = terms.credit_limit.amount - outstanding_principal_of(active).amount
         if purchase.amount.amount > available:
             readable_available = f"{max(available, Decimal(0)):.2f}"
             raise BusinessError(
@@ -80,7 +85,3 @@ class PurchaseRegistrationService:
         await self._purchases.add(purchase)
         await self._unit_of_work.commit()
         return purchase
-
-    async def _outstanding(self, account_id: int) -> Decimal:
-        active = await self._purchases.list_active_by_account(account_id)
-        return sum((p.outstanding_principal().amount for p in active), Decimal(0))

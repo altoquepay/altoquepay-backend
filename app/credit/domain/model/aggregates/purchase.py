@@ -259,3 +259,8 @@ class Purchase:
                 installment.payment_id = payment_id
         self.status = PurchaseStatus.PREPAID
         self.payment_id = payment_id
+
+
+def outstanding_principal_of(purchases: list[Purchase]) -> Money:
+    """Return the principal owed on the purchases, what counts against the credit limit."""
+    return Money(sum((p.outstanding_principal().amount for p in purchases), Decimal(0)))
