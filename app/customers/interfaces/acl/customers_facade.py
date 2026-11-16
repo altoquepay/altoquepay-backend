@@ -88,6 +88,14 @@ class CustomersFacade:
             if account.id is not None
         ]
 
+    async def list_accounts_of_store(self, store_id: int) -> list[AccountSummary]:
+        """Return the active and inactive accounts of a store, for its reports."""
+        return [
+            AccountSummary(account.id, account.store_id, account.status.value)
+            for account in await self._accounts.list_by_store(store_id)
+            if account.id is not None
+        ]
+
     async def count_by_store(self, store_id: int) -> int:
         """Return the number of active accounts of a store."""
         return await self._accounts.count_active_by_store(store_id)
