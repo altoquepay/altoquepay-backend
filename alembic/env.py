@@ -6,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.catalog.infrastructure.persistence.models  # noqa: F401
+import app.customers.infrastructure.persistence.models  # noqa: F401
 import app.iam.infrastructure.persistence.models  # noqa: F401
 import app.regulation.infrastructure.persistence.models  # noqa: F401
 import app.stores.infrastructure.persistence.models  # noqa: F401
