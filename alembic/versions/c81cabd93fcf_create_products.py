@@ -1,7 +1,7 @@
 """create products
 
 Revision ID: c81cabd93fcf
-Revises: 3604230b4eb3
+Revises: 28fd9a4c3fdd
 Create Date: 2026-11-16 12:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c81cabd93fcf"
-down_revision: str | Sequence[str] | None = "3604230b4eb3"
+down_revision: str | Sequence[str] | None = "28fd9a4c3fdd"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
