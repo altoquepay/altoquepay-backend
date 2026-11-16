@@ -23,3 +23,14 @@ def test_names_are_required_and_bounded(first_names, last_names, field):
         Customer(Dni("01234567"), first_names, last_names, 1)
 
     assert (error.value.code, error.value.field) == ("INVALID_NAME", field)
+
+
+def test_contact_update_keeps_the_dni_and_validates_again():
+    customer = Customer(Dni("01234567"), "Rosa", "Quispe", 1, phone="987654321")
+
+    customer.update_contact(" Rosa María ", "Quispe", "  ", "Jr. Lima")
+
+    assert (customer.dni.value, customer.first_names) == ("01234567", "Rosa María")
+    assert (customer.phone, customer.address) == (None, "Jr. Lima")
+    with pytest.raises(BusinessError):
+        customer.update_contact("", "Quispe", None, None)

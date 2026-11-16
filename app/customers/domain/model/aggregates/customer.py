@@ -10,6 +10,8 @@ NAMES_MAXIMUM_LENGTH = 100
 
 @dataclass
 class Customer:
+    """The person's data is shared: a store that edits it changes it for every store."""
+
     dni: Dni
     first_names: str
     last_names: str
@@ -24,9 +26,19 @@ class Customer:
         self.phone = blank_as_none(self.phone)
         self.address = blank_as_none(self.address)
 
+    def update_contact(
+        self, first_names: str, last_names: str, phone: str | None, address: str | None
+    ) -> None:
+        """Change what may be edited. The DNI is the person's identity, so it never changes."""
+        self.first_names = first_names
+        self.last_names = last_names
+        self.phone = phone
+        self.address = address
+        self.__post_init__()
 
-def required_name(name: str, field: str) -> str:
-    name = name.strip()
+
+def required_name(name: str | None, field: str) -> str:
+    name = (name or "").strip()
     if not 1 <= len(name) <= NAMES_MAXIMUM_LENGTH:
         raise BusinessError(
             "INVALID_NAME",
