@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-16
+
+### Added
+- **Customers API**: store customer accounts with search, DNI lookup, opening with the store's default conditions and BCRP-validated rates, editing, deactivation and password reset under `/customers`.
+- **Catalog API**: products with search, editing, deactivation and image upload under `/products`; images are stored on disk under `MEDIA_DIR` and served at `/media`.
+- **Billing Payments**: the `payments` table and the five payment kinds (cycle statement, installment, installment advance, early single date payment and full prepayment), applied first to late interest, then to ordinary interest, then to principal, with no partial payments; cycles close the first time billing reads them after their cutoff; late interest on overdue amounts; `/cycles`, the cycle statement, `/payments/quote` and `/payments`; and `BillingFacade.get_cycle_statement` and `list_payments`.
+- **Reporting**: the customer portal under `/me/stores`, the store dashboard and the period report.
+
+### Changed
+- **Credit**: `purchases.payment_id` and `installments.payment_id` now reference `payments`.
+
+### Known gaps
+- Product images live on the container disk, so they are lost on every redeploy.
+- The store report reads each account through the facades one at a time.
+- The cycle statement has no PDF export.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
