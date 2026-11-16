@@ -2,7 +2,7 @@
 
 REST API of **AlToquePay**, a web application for neighborhood corner stores (*bodegas*) to manage the credit they grant to their customers. It is built with FastAPI and consumed by the Angular web frontend, [altoquepay-frontend](https://github.com/altoquepay/altoquepay-frontend).
 
-> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps), the `iam` context (sign-in and passwords), the `stores` context (store registration, profile and administration), the `customers` context (customer accounts and their credit conditions), the `catalog` context (products and their images), the `credit` context (purchases, weekly French schedules and installments) and the `billing` context (cycles, statements, payments and late interest) are done. `reporting` is not implemented yet.
+> **Status:** early development (`0.x`). The shared kernel, the ACL facade contracts, the `regulation` context (BCRP caps), the `iam` context (sign-in and passwords), the `stores` context (store registration, profile and administration), the `customers` context (customer accounts and their credit conditions), the `catalog` context (products and their images), the `credit` context (purchases, weekly French schedules and installments) the `billing` context (cycles, statements, payments and late interest) and the `reporting` context (customer portal, dashboard and period report) are done.
 
 ## Team
 

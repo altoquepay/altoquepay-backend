@@ -15,6 +15,7 @@ from app.customers.interfaces.rest.router import router as customers_router
 from app.iam.infrastructure.first_admin import create_first_system_admin
 from app.iam.interfaces.rest.router import router as iam_router
 from app.regulation.interfaces.rest.router import router as regulation_router
+from app.reporting.interfaces.rest.router import router as reporting_router
 from app.shared.infrastructure.config import get_settings
 from app.shared.infrastructure.database import engine
 from app.shared.interfaces.rest.error_handlers import register_error_handlers
@@ -43,6 +44,7 @@ app.include_router(customers_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(credit_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
+app.include_router(reporting_router, prefix="/api/v1")
 
 # Uploaded files, such as product images. The folder must exist before StaticFiles reads it.
 media_dir = Path(get_settings().media_dir)
