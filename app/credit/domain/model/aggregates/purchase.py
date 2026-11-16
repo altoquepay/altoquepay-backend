@@ -14,6 +14,8 @@ from app.shared.domain.errors import BusinessError
 from app.shared.domain.finance import te7d
 from app.shared.domain.value_objects import Money, Rate
 
+RATE_PERCENT_STEP = Decimal("0.0000001")
+
 
 class PaymentMode(StrEnum):
     SINGLE_DATE = "SINGLE_DATE"
@@ -169,7 +171,8 @@ class Purchase:
             )
         purchase.grace_days = days
         purchase.capitalized_amount = capitalize(purchase.amount, tea, days)
-        purchase.weekly_rate = Rate(te7d(tea))
+        # Shown and stored with 7 decimals; the schedule uses it at full precision.
+        purchase.weekly_rate = Rate.from_percent((te7d(tea) * 100).quantize(RATE_PERCENT_STEP))
         purchase.installments_count = installments_count
         schedule = french_schedule(
             purchase.capitalized_amount, tea, installments_count, cycle_payment_date
