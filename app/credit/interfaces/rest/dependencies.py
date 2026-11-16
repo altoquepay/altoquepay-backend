@@ -7,6 +7,7 @@ from app.catalog.interfaces.acl.catalog_facade import CatalogFacade
 from app.credit.application.command_services.purchase_registration_service import (
     PurchaseRegistrationService,
 )
+from app.credit.application.query_services.purchase_query_service import PurchaseQueryService
 from app.credit.infrastructure.acl.external_billing import ExternalBilling
 from app.credit.infrastructure.acl.external_catalog import ExternalCatalog
 from app.credit.infrastructure.acl.external_customers import ExternalCustomers
@@ -25,3 +26,9 @@ def get_purchase_registration_service(
         ExternalBilling(BillingFacade(unit_of_work)),
         unit_of_work,
     )
+
+
+def get_purchase_query_service(
+    unit_of_work: Annotated[UnitOfWork, Depends(get_unit_of_work)],
+) -> PurchaseQueryService:
+    return PurchaseQueryService(PurchaseRepositoryImpl(unit_of_work.session))

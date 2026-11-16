@@ -3,7 +3,7 @@
 Every test shares one Unit of Work that never commits, so what it creates disappears.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,7 +12,7 @@ from app.customers.domain.model.aggregates.store_customer import AccountStatus
 from app.main import app as application
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
-from app.shared.interfaces.rest.business_date import get_business_now
+from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from tests.authorization import authorization
 from tests.credit.stored_credit import LIMA, add_credit_setup
 from tests.stored_account import add_account, add_customer
@@ -35,6 +35,7 @@ async def unit_of_work():
 async def client(unit_of_work):
     application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
     application.dependency_overrides[get_business_now] = lambda: NOW
+    application.dependency_overrides[get_business_today] = lambda: NOW.date()
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -184,3 +185,84 @@ async def test_only_store_administrators_register_purchases(client, setup):
     assert (await client.post("/api/v1/purchases", json=report_test_3(setup))).status_code == 401
     response = await client.post("/api/v1/purchases", json=report_test_3(setup), headers=customer)
     assert response.status_code == 403
+
+
+async def register(client, setup, admin, **overrides) -> dict:
+    response = await client.post(
+        "/api/v1/purchases", json=report_test_3(setup, **overrides), headers=admin
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+async def test_purchase_and_its_schedule_are_read_back(client, setup, admin):
+    registered = await register(client, setup, admin)
+
+    detail = await client.get(f"/api/v1/purchases/{registered['id']}", headers=admin)
+    schedule = await client.get(f"/api/v1/purchases/{registered['id']}/schedule", headers=admin)
+
+    # The database returns purchased_at in UTC: the same instant, written differently.
+    read_back = detail.json()
+    assert datetime.fromisoformat(read_back.pop("purchased_at")) == datetime.fromisoformat(
+        registered.pop("purchased_at")
+    )
+    assert read_back == registered
+    assert schedule.json() == registered["installments"]
+
+
+async def test_overdue_installments_are_shown_as_overdue(client, setup, admin):
+    registered = await register(client, setup, admin)
+    application.dependency_overrides[get_business_today] = lambda: date(2026, 12, 11)
+
+    schedule = await client.get(f"/api/v1/purchases/{registered['id']}/schedule", headers=admin)
+    overdue = await client.get("/api/v1/installments?status=OVERDUE", headers=admin)
+    due_by_the_17th = await client.get("/api/v1/installments?due_before=2026-12-17", headers=admin)
+
+    assert [i["status"] for i in schedule.json()] == ["OVERDUE", "OVERDUE", "PENDING", "PENDING"]
+    assert [(i["number"], i["purchase_id"]) for i in overdue.json()["items"]] == [
+        (1, registered["id"]),
+        (2, registered["id"]),
+    ]
+    assert overdue.json()["items"][0]["customer_id"] == setup.account_id
+    assert due_by_the_17th.json()["total"] == 3
+
+
+async def test_purchase_history_is_filtered(client, setup, admin):
+    weekly = await register(client, setup, admin)
+    single_date = await register(
+        client,
+        setup,
+        admin,
+        mode="SINGLE_DATE",
+        installments_count=None,
+        purchased_at="2026-11-02T09:00:00-05:00",
+    )
+
+    everything = await client.get("/api/v1/purchases", headers=admin)
+    by_mode = await client.get("/api/v1/purchases?mode=SINGLE_DATE", headers=admin)
+    in_october = await client.get("/api/v1/purchases?from=2026-10-01&to=2026-10-31", headers=admin)
+    by_customer = await client.get(
+        f"/api/v1/purchases?customer_id={setup.account_id}&size=1", headers=admin
+    )
+
+    assert [p["id"] for p in everything.json()["items"]] == [single_date["id"], weekly["id"]]
+    assert "items" not in everything.json()["items"][0]
+    assert [p["id"] for p in by_mode.json()["items"]] == [single_date["id"]]
+    assert [p["id"] for p in in_october.json()["items"]] == [weekly["id"]]
+    assert (by_customer.json()["total"], len(by_customer.json()["items"])) == (2, 1)
+
+
+async def test_purchases_of_other_stores_are_not_found(client, unit_of_work, setup, admin):
+    other = await add_credit_setup(unit_of_work, ruc="20999999991", dni="70000002")
+    other_admin = authorization(sub=str(other.user_id), store_id=other.store_id)
+    registered = await register(client, setup, admin)
+
+    detail = await client.get(f"/api/v1/purchases/{registered['id']}", headers=other_admin)
+    schedule = await client.get(
+        f"/api/v1/purchases/{registered['id']}/schedule", headers=other_admin
+    )
+    history = await client.get("/api/v1/purchases", headers=other_admin)
+    installments = await client.get("/api/v1/installments", headers=other_admin)
+
+    assert (detail.status_code, schedule.status_code) == (404, 404)
+    assert (history.json()["total"], installments.json()["total"]) == (0, 0)
