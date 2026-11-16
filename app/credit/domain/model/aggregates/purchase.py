@@ -112,6 +112,16 @@ class Purchase:
     def amount(self) -> Money:
         return Money(sum((item.subtotal.amount for item in self.items), Decimal(0)))
 
+    @property
+    def total(self) -> Money:
+        """Return what the customer pays without late interest: amount plus ordinary interest.
+
+        A weekly purchase also pays the grace interest, so its total is its installments.
+        """
+        if self.mode == PaymentMode.WEEKLY:
+            return Money(sum((i.amount.amount for i in self.installments), Decimal(0)))
+        return Money(self.amount.amount + self.ordinary_interest.amount)
+
     @classmethod
     def register(
         cls,
@@ -133,6 +143,10 @@ class Purchase:
         """Calculate the purchase. purchase_day is the day of purchased_at in the business zone."""
         if not items:
             raise BusinessError("NO_ITEMS", "A purchase needs at least one item.", field="items")
+        if len({item.product_id for item in items}) < len(items):
+            raise BusinessError(
+                "DUPLICATE_PRODUCT", "Each product goes in one item only.", field="items"
+            )
         days = (cycle_payment_date - purchase_day).days
         purchase = cls(
             store_id=store_id,

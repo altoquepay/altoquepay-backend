@@ -132,3 +132,20 @@ def test_pending_installment_past_its_due_date_shows_as_overdue():
 
     assert installment.status_on(date(2026, 12, 3)) == InstallmentStatus.PENDING
     assert installment.status_on(date(2026, 12, 4)) == InstallmentStatus.OVERDUE
+
+
+def test_a_product_goes_in_one_item_only():
+    price = Money(Decimal("1"))
+
+    with pytest.raises(BusinessError) as error:
+        register(items=[PurchaseItem(10, 1, price), PurchaseItem(10, 2, price)])
+
+    assert (error.value.code, error.value.field) == ("DUPLICATE_PRODUCT", "items")
+
+
+def test_total_is_what_the_customer_pays():
+    weekly = register()
+    single_date = register(mode=PaymentMode.SINGLE_DATE, installments_count=None)
+
+    assert weekly.total == Money(Decimal("438.73"))
+    assert single_date.total == Money(Decimal("426.99"))

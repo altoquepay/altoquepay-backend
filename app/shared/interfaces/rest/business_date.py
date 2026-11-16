@@ -8,4 +8,9 @@ from app.shared.infrastructure.config import get_settings
 
 def get_business_today() -> date:
     """Return today in the time zone of the business, which may differ from the server's."""
-    return datetime.now(ZoneInfo(get_settings().app_timezone)).date()
+    return get_business_now().date()
+
+
+def get_business_now() -> datetime:
+    """Return the current time in the time zone of the business."""
+    return datetime.now(ZoneInfo(get_settings().app_timezone))
