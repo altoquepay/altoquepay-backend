@@ -51,8 +51,7 @@ class PurchaseModel(Base):
     ordinary_interest: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(String(7))
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    # shortcut: no foreign key until billing creates the payments table; add it then.
-    payment_id: Mapped[int | None]
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"))
 
     items: Mapped[list["PurchaseItemModel"]] = relationship(
         lazy="selectin", order_by="PurchaseItemModel.id"
@@ -98,5 +97,4 @@ class InstallmentModel(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     closing_balance: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(String(9))
-    # shortcut: no foreign key until billing creates the payments table; add it then.
-    payment_id: Mapped[int | None]
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"))
