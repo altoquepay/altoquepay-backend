@@ -8,10 +8,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.customers.interfaces.acl.customers_facade import CustomersFacade
+from app.customers.domain.model.aggregates.customer import Customer
+from app.customers.infrastructure.persistence.customer_repository_impl import (
+    CustomerRepositoryImpl,
+)
 from app.iam.interfaces.acl.iam_facade import IamFacade
 from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
 from app.main import app as application
+from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from tests.iam.fakes import RecordingNotifier
@@ -39,12 +43,7 @@ def notifier():
 
 
 @pytest.fixture
-async def client(unit_of_work, notifier, monkeypatch):
-    async def customer_of_user(_facade, user_id: int) -> int:
-        return 4
-
-    # The customers context is not built yet.
-    monkeypatch.setattr(CustomersFacade, "get_customer_id_by_user", customer_of_user)
+async def client(unit_of_work, notifier):
     application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
     application.dependency_overrides[get_password_reset_notifier] = lambda: notifier
     transport = ASGITransport(app=application)
@@ -67,7 +66,10 @@ async def store_admin_id(unit_of_work, store_id):
 
 @pytest.fixture
 async def customer_credentials(unit_of_work):
-    return await IamFacade(unit_of_work).create_customer_user(CUSTOMER_DNI)
+    credentials = await IamFacade(unit_of_work).create_customer_user(CUSTOMER_DNI)
+    customer = Customer(Dni(CUSTOMER_DNI), "Rosa", "Quispe", credentials.user_id)
+    await CustomerRepositoryImpl(unit_of_work.session).add(customer)
+    return credentials, customer.id
 
 
 async def login(client, username: str, password: str):
@@ -112,13 +114,13 @@ async def test_wrong_password_is_rejected(client, store_admin_id):
 async def test_customer_is_blocked_until_changing_the_temporary_password(
     client, customer_credentials
 ):
-    signed_in = await login(client, CUSTOMER_DNI, customer_credentials.temporary_password)
+    signed_in = await login(client, CUSTOMER_DNI, customer_credentials[0].temporary_password)
     blocked = await client.get("/api/v1/bcrp-caps/current", headers=bearer(signed_in))
     me = await client.get("/api/v1/auth/me", headers=bearer(signed_in))
     changed = await client.post(
         "/api/v1/auth/change-password",
         json={
-            "current_password": customer_credentials.temporary_password,
+            "current_password": customer_credentials[0].temporary_password,
             "new_password": "mi-clave-segura",
         },
         headers=bearer(signed_in),
@@ -127,14 +129,15 @@ async def test_customer_is_blocked_until_changing_the_temporary_password(
 
     assert signed_in.json()["must_change_password"] is True
     assert (blocked.status_code, blocked.json()["code"]) == (403, "PASSWORD_CHANGE_REQUIRED")
-    assert (me.json()["customer_id"], me.json()["must_change_password"]) == (4, True)
+    customer_id = customer_credentials[1]
+    assert (me.json()["customer_id"], me.json()["must_change_password"]) == (customer_id, True)
     assert (changed.status_code, changed.json()["must_change_password"]) == (200, False)
     assert unblocked.status_code != 403
     assert (await login(client, CUSTOMER_DNI, "mi-clave-segura")).status_code == 200
 
 
 async def test_wrong_current_password_is_reported_on_its_field(client, customer_credentials):
-    signed_in = await login(client, CUSTOMER_DNI, customer_credentials.temporary_password)
+    signed_in = await login(client, CUSTOMER_DNI, customer_credentials[0].temporary_password)
 
     response = await client.post(
         "/api/v1/auth/change-password",
