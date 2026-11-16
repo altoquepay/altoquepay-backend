@@ -21,6 +21,10 @@ class PaymentRepository(ABC):
         """Return the payments of an account, most recent first."""
 
     @abstractmethod
+    async def list_by_store(self, store_id: int, payment_filter: PaymentFilter) -> list[Payment]:
+        """Return every payment of the store that passes the filter, most recent first."""
+
+    @abstractmethod
     async def list_page(
         self, store_id: int, payment_filter: PaymentFilter, offset: int, size: int
     ) -> tuple[list[Payment], int]:

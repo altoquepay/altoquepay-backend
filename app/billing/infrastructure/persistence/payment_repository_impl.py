@@ -34,6 +34,12 @@ class PaymentRepositoryImpl(PaymentRepository):
         )
         return [payment_to_domain(model) for model in models]
 
+    async def list_by_store(self, store_id: int, payment_filter: PaymentFilter) -> list[Payment]:
+        models = await self._session.scalars(
+            filtered(select(PaymentModel), store_id, payment_filter).order_by(*MOST_RECENT_FIRST)
+        )
+        return [payment_to_domain(model) for model in models]
+
     async def list_page(
         self, store_id: int, payment_filter: PaymentFilter, offset: int, size: int
     ) -> tuple[list[Payment], int]:

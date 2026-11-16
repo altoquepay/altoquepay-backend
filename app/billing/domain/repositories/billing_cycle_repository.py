@@ -29,6 +29,16 @@ class BillingCycleRepository(ABC):
         """Return the open cycles whose cutoff day already ended, of a store or an account."""
 
     @abstractmethod
+    async def list_closed_by_payment_date(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[BillingCycle]:
+        """Return the store's closed, unpaid cycles payable within the inclusive range."""
+
+    @abstractmethod
+    async def find_next_cutoff(self, store_id: int, today: date) -> date | None:
+        """Return the earliest cutoff day, today or later, among the store's open cycles."""
+
+    @abstractmethod
     async def list_page(
         self, store_id: int, cycle_filter: CycleFilter, today: date, offset: int, size: int
     ) -> tuple[list[BillingCycle], int]:
