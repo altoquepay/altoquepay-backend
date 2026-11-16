@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.billing.interfaces.rest.router import router as billing_router
 from app.catalog.interfaces.rest.router import router as catalog_router
 from app.credit.interfaces.rest.router import router as credit_router
 from app.customers.interfaces.rest.router import router as customers_router
@@ -41,6 +42,7 @@ app.include_router(stores_router, prefix="/api/v1")
 app.include_router(customers_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(credit_router, prefix="/api/v1")
+app.include_router(billing_router, prefix="/api/v1")
 
 # Uploaded files, such as product images. The folder must exist before StaticFiles reads it.
 media_dir = Path(get_settings().media_dir)
