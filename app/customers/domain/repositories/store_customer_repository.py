@@ -31,8 +31,8 @@ class StoreCustomerRepository(ABC):
         """Return the accounts of a person in every store, the oldest first."""
 
     @abstractmethod
-    async def list_by_store(self, store_id: int) -> list[StoreCustomer]:
-        """Return the active and inactive accounts of a store, the oldest first."""
+    async def list_by_store(self, store_id: int) -> list[tuple[StoreCustomer, Customer]]:
+        """Return the active and inactive accounts of a store with their person, oldest first."""
 
     @abstractmethod
     async def list_page(

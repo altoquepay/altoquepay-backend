@@ -6,6 +6,7 @@ import pytest
 
 from app.customers.domain.model.aggregates.store_customer import AccountStatus
 from app.customers.interfaces.acl.customers_facade import (
+    AccountHolder,
     AccountSummary,
     CreditTerms,
     CustomersFacade,
@@ -110,7 +111,7 @@ async def test_customer_of_a_user(facade, unit_of_work):
     assert (error.value.code, error.value.status) == ("NOT_FOUND", 404)
 
 
-async def test_accounts_of_a_store_include_inactive_ones_and_no_other_store(facade, unit_of_work):
+async def test_holders_of_a_store_include_inactive_accounts_only_of_it(facade, unit_of_work):
     store = await add_store(unit_of_work)
     other_store = await add_store(unit_of_work, ruc="20999999991")
     rosa = await add_customer(unit_of_work)
@@ -119,10 +120,10 @@ async def test_accounts_of_a_store_include_inactive_ones_and_no_other_store(faca
     second = await add_account(unit_of_work, store.id, luis.id, status=AccountStatus.INACTIVE)
     await add_account(unit_of_work, other_store.id, rosa.id)
 
-    accounts = await facade.list_accounts_of_store(store.id)
+    holders = await facade.list_account_holders(store.id)
 
-    assert accounts == [
-        AccountSummary(first.id, store.id, "ACTIVE"),
-        AccountSummary(second.id, store.id, "INACTIVE"),
+    assert holders == [
+        AccountHolder(first.id, "ACTIVE", "70000001", "Rosa Quispe Mamani"),
+        AccountHolder(second.id, "INACTIVE", "70000002", "Rosa Quispe Mamani"),
     ]
-    assert await facade.list_accounts_of_store(999_999) == []
+    assert await facade.list_account_holders(999_999) == []
