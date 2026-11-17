@@ -1,10 +1,15 @@
 """Tests for the customers facade against the migrated PostgreSQL database. Nothing is committed."""
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 
 from app.customers.domain.model.aggregates.store_customer import AccountStatus
+from app.customers.domain.services.access_code import hash_access_code
+from app.customers.infrastructure.persistence.store_customer_repository_impl import (
+    StoreCustomerRepositoryImpl,
+)
 from app.customers.interfaces.acl.customers_facade import (
     AccountHolder,
     AccountSummary,
@@ -96,10 +101,38 @@ async def test_accounts_of_a_person_include_inactive_ones(facade, unit_of_work):
     accounts = await facade.get_accounts_of_person(customer.id)
 
     assert accounts == [
-        AccountSummary(active.id, store.id, "ACTIVE"),
-        AccountSummary(inactive.id, other_store.id, "INACTIVE"),
+        AccountSummary(active.id, store.id, "ACTIVE", portal_linked=True),
+        AccountSummary(inactive.id, other_store.id, "INACTIVE", portal_linked=True),
     ]
     assert await facade.get_accounts_of_person(999_999) == []
+
+
+async def test_redeeming_a_code_links_its_store_and_unlinks_the_others(facade, unit_of_work):
+    now = datetime.now(UTC)
+    store = await add_store(unit_of_work)
+    other_store = await add_store(unit_of_work, ruc="20999999991")
+    customer = await add_customer(unit_of_work)
+    await add_customer(unit_of_work, dni="70000002")
+    new_account = await add_account(unit_of_work, store.id, customer.id, portal_linked=False)
+    await add_account(unit_of_work, other_store.id, customer.id)
+    new_account.issue_access_code(hash_access_code("K7QHM2XWPB"), now)
+    await StoreCustomerRepositoryImpl(unit_of_work.session).update(new_account)
+
+    with pytest.raises(BusinessError) as of_another_person:
+        await facade.redeem_access_code("70000002", "K7QHM2XWPB", now)
+    user_id = await facade.redeem_access_code("70000001", "k7qhm-2xwpb", now)
+    with pytest.raises(BusinessError) as already_spent:
+        await facade.redeem_access_code("70000001", "K7QHM2XWPB", now)
+
+    assert user_id == customer.user_id
+    assert [
+        (account.store_id, account.portal_linked)
+        for account in await facade.get_accounts_of_person(customer.id)
+    ] == [(store.id, True), (other_store.id, False)]
+    assert (of_another_person.value.code, already_spent.value.code) == (
+        "INVALID_ACCESS_CODE",
+        "INVALID_ACCESS_CODE",
+    )
 
 
 async def test_customer_of_a_user(facade, unit_of_work):

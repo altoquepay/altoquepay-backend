@@ -1,5 +1,7 @@
-from app.customers.application.command_services.account_command_service import OpenedAccount
-from app.customers.application.ports.customer_users import CustomerCredentials
+from app.customers.application.command_services.account_command_service import (
+    AccessCode,
+    OpenedAccount,
+)
 from app.customers.application.query_services.account_query_service import (
     CustomerAccount,
     PersonLookup,
@@ -7,7 +9,7 @@ from app.customers.application.query_services.account_query_service import (
 from app.customers.domain.model.commands.open_account_command import OpenAccountCommand
 from app.customers.domain.model.commands.update_account_command import UpdateAccountCommand
 from app.customers.interfaces.rest.resources.customer_resources import (
-    CredentialsResource,
+    AccessCodeResource,
     CustomerAccountResource,
     OpenAccountResource,
     OpenedAccountResource,
@@ -75,21 +77,19 @@ def to_resource(found: CustomerAccount) -> CustomerAccountResource:
         late_tea=conditions.late_tea.percent,
         max_weeks=conditions.max_weeks,
         status=account.status,
+        portal_linked=account.is_portal_linked,
         created_at=account.created_at,
     )
 
 
-def to_credentials_resource(credentials: CustomerCredentials) -> CredentialsResource:
-    return CredentialsResource(
-        username=credentials.username, temporary_password=credentials.temporary_password
-    )
+def to_access_code_resource(access_code: AccessCode) -> AccessCodeResource:
+    return AccessCodeResource(code=access_code.code, expires_at=access_code.expires_at)
 
 
 def to_opened_resource(opened: OpenedAccount) -> OpenedAccountResource:
-    credentials = opened.credentials
     return OpenedAccountResource(
         account=to_resource(opened.customer_account),
-        credentials=to_credentials_resource(credentials) if credentials else None,
+        access_code=to_access_code_resource(opened.access_code),
     )
 
 

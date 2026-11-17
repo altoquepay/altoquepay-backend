@@ -5,10 +5,12 @@ Rates are percentages, as stored: 75% is Decimal("75.0000000").
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.model.aggregates.store_customer import StoreCustomer
+from app.customers.domain.services.access_code import invalid_access_code, redeemed_account
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
@@ -16,6 +18,7 @@ from app.customers.infrastructure.persistence.store_customer_repository_impl imp
     StoreCustomerRepositoryImpl,
 )
 from app.shared.domain.errors import BusinessError
+from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.unit_of_work import UnitOfWork
 
 
@@ -35,9 +38,12 @@ class CreditTerms:
 
 @dataclass(frozen=True)
 class AccountSummary:
+    """portal_linked tells whether the customer may see the account in their portal."""
+
     account_id: int
     store_id: int
     status: str
+    portal_linked: bool
 
 
 @dataclass(frozen=True)
@@ -93,10 +99,35 @@ class CustomersFacade:
     async def get_accounts_of_person(self, customer_id: int) -> list[AccountSummary]:
         """Return the active and inactive accounts of a person in every store."""
         return [
-            AccountSummary(account.id, account.store_id, account.status.value)
+            AccountSummary(
+                account.id, account.store_id, account.status.value, account.is_portal_linked
+            )
             for account in await self._accounts.list_by_customer(customer_id)
             if account.id is not None
         ]
+
+    async def redeem_access_code(self, dni: str, code: str, now: datetime) -> int:
+        """Link the account whose store issued the code and return the user of its person.
+
+        It is redeemed without a session, to choose a new password, so only that store vouches
+        for who holds it: the person's accounts in other stores leave the portal until each of
+        them hands over a new code. Raises INVALID_ACCESS_CODE (422) if the DNI and the code do
+        not match a code still in force.
+        """
+        person = await self._customers.find_by_dni(Dni(dni.strip()))
+        if person is None or person.id is None:
+            raise invalid_access_code()
+        accounts = await self._accounts.list_by_customer(person.id)
+        redeemed = redeemed_account(accounts, code, now)
+        # shortcut: two requests redeeming the same code at the same time both pass; lock the
+        # person's accounts first if a code ever has to be strictly single use.
+        for account in accounts:
+            if account is redeemed:
+                account.link_portal(now)
+            else:
+                account.unlink_portal()
+            await self._accounts.update(account)
+        return person.user_id
 
     async def list_account_holders(self, store_id: int) -> list[AccountHolder]:
         """Return the active and inactive accounts of a store with who holds them, oldest first."""

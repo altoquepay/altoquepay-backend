@@ -13,6 +13,7 @@ def to_domain(model: UserModel) -> User:
         full_name=model.full_name,
         must_change_password=model.must_change_password,
         is_active=model.is_active,
+        password_version=model.password_version,
         id=model.id,
     )
 
@@ -25,6 +26,7 @@ def copy_to_model(user: User, model: UserModel) -> UserModel:
     model.full_name = user.full_name
     model.must_change_password = user.must_change_password
     model.is_active = user.is_active
+    model.password_version = user.password_version
     return model
 
 

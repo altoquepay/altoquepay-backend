@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -14,15 +14,16 @@ from app.customers.interfaces.rest.dependencies import (
     get_account_query_service,
 )
 from app.customers.interfaces.rest.resources.customer_resources import (
-    CredentialsResource,
+    AccessCodeResource,
     CustomerAccountResource,
+    LinkStoreResource,
     OpenAccountResource,
     OpenedAccountResource,
     PersonLookupResource,
     UpdateAccountResource,
 )
 from app.customers.interfaces.rest.transform.customer_transform import (
-    to_credentials_resource,
+    to_access_code_resource,
     to_lookup_resource,
     to_open_command,
     to_opened_resource,
@@ -30,14 +31,18 @@ from app.customers.interfaces.rest.transform.customer_transform import (
     to_update_command,
 )
 from app.shared.domain.value_objects import Dni
-from app.shared.interfaces.rest.business_date import get_business_today
+from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from app.shared.interfaces.rest.pagination import Page, PageParams
-from app.shared.interfaces.rest.security import get_store_id
+from app.shared.interfaces.rest.security import CurrentUser, get_customer, get_store_id
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
+# Outside /customers: the customer signs in to their own portal, which lives under /me.
+portal_router = APIRouter(tags=["Customers"])
 
 StoreId = Annotated[int, Depends(get_store_id)]
+Customer = Annotated[CurrentUser, Depends(get_customer)]
 Today = Annotated[date, Depends(get_business_today)]
+Now = Annotated[datetime, Depends(get_business_now)]
 QueryService = Annotated[AccountQueryService, Depends(get_account_query_service)]
 CommandService = Annotated[AccountCommandService, Depends(get_account_command_service)]
 
@@ -82,12 +87,14 @@ async def open_account(
     store_id: StoreId,
     command_service: CommandService,
     today: Today,
+    now: Now,
 ) -> OpenedAccountResource:
     """Open the store's account for a person. Missing conditions take the store's defaults.
 
-    The credentials come back only when the DNI is new, and only this once.
+    The access code comes back only this once. Hand it to the customer: the account stays out
+    of their portal until they redeem it.
     """
-    opened = await command_service.open(to_open_command(resource, store_id), today)
+    opened = await command_service.open(to_open_command(resource, store_id), today, now)
     return to_opened_resource(opened)
 
 
@@ -123,10 +130,22 @@ async def deactivate_customer(
     return to_resource(await command_service.deactivate(store_id, account_id))
 
 
-@router.post("/{account_id}/reset-password")
-async def reset_customer_password(
-    account_id: int, store_id: StoreId, command_service: CommandService
-) -> CredentialsResource:
-    """Give the customer a new temporary password, shown only this once."""
-    credentials = await command_service.reset_password(store_id, account_id)
-    return to_credentials_resource(credentials)
+@router.post("/{account_id}/access-code")
+async def issue_access_code(
+    account_id: int, store_id: StoreId, command_service: CommandService, now: Now
+) -> AccessCodeResource:
+    """Give the customer a new access code, shown only this once. It replaces the previous one.
+
+    For a customer who forgot their password or still has to link this store. Nothing changes
+    for them until they redeem it.
+    """
+    access_code = await command_service.issue_access_code(store_id, account_id, now)
+    return to_access_code_resource(access_code)
+
+
+@portal_router.post("/me/stores/link", status_code=204)
+async def link_my_store(
+    resource: LinkStoreResource, customer: Customer, command_service: CommandService, now: Now
+) -> None:
+    """Add a store to the signed-in customer's portal with the access code it handed them."""
+    await command_service.link_with_code(int(customer.user_id), resource.code, now)

@@ -40,7 +40,11 @@ class UpdateAccountResource(BaseModel):
 
 
 class CustomerAccountResource(BaseModel):
-    """id is the account (store_customers.id), the id every /customers/{id} route takes."""
+    """id is the account (store_customers.id), the id every /customers/{id} route takes.
+
+    portal_linked is false until the customer redeems an access code of this store, so the
+    store knows it still has to hand one over.
+    """
 
     id: int
     customer_id: int
@@ -56,28 +60,33 @@ class CustomerAccountResource(BaseModel):
     late_tea: Decimal
     max_weeks: int
     status: AccountStatus
+    portal_linked: bool
     created_at: datetime
 
 
-class CredentialsResource(BaseModel):
-    """Shown once: the store hands the temporary password to the customer."""
+class AccessCodeResource(BaseModel):
+    """Shown once: the store hands the code to the customer, who redeems it before expires_at."""
 
-    username: str
-    temporary_password: str
+    code: str
+    expires_at: datetime
 
 
 class OpenedAccountResource(BaseModel):
-    """credentials is null when the person already had a user from another store."""
+    """The access code links this account to the customer's portal, new person or not."""
 
     account: CustomerAccountResource
-    credentials: CredentialsResource | None
+    access_code: AccessCodeResource
+
+
+class LinkStoreResource(BaseModel):
+    code: str = Field(max_length=20, examples=["K7QHM2XWPB"])
 
 
 class PersonLookupResource(BaseModel):
     """account_id is the person's account in this store, if any.
 
     notice is PERSON_HAS_ACCOUNT when the person already buys in another store: not an error,
-    but they keep the user and password they already have.
+    but they keep the user and password they already have, and add this store with its code.
     """
 
     customer_id: int

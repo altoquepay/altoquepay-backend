@@ -26,8 +26,8 @@ def service():
             CurrentUser("7", Role.STORE_ADMIN, False, store_id=3),
         ),
         (
-            TokenClaims(9, Role.CUSTOMER, must_change_password=True, customer_id=4),
-            CurrentUser("9", Role.CUSTOMER, True, customer_id=4),
+            TokenClaims(9, Role.CUSTOMER, False, customer_id=4, password_version=2),
+            CurrentUser("9", Role.CUSTOMER, False, customer_id=4, password_version=2),
         ),
         (
             TokenClaims(1, Role.SYSTEM_ADMIN, must_change_password=False),

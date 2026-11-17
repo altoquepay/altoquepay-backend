@@ -4,7 +4,7 @@ Every test shares one Unit of Work that never commits, so what it creates disapp
 New stores start with cutoff 10, payment 15, TEA 40%, late TEA 15% and 4 weeks.
 """
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app as application
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
-from app.shared.interfaces.rest.business_date import get_business_today
+from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 
 PASSWORD = "mi-clave-segura"
 NEW_CUSTOMER = {
@@ -73,7 +73,19 @@ async def open_account(client, headers, **changes):
     return await client.post("/api/v1/customers", json=NEW_CUSTOMER | changes, headers=headers)
 
 
-async def test_new_dni_gets_an_account_with_the_store_defaults_and_credentials(client, admin):
+async def redeem(client, code: str, dni: str = "45678912", password: str = PASSWORD):
+    """Redeem a store's access code without a session, choosing a password."""
+    return await client.post(
+        "/api/v1/auth/redeem-access-code",
+        json={"dni": dni, "code": code, "new_password": password},
+    )
+
+
+async def sign_in(client, dni: str = "45678912", password: str = PASSWORD):
+    return await client.post("/api/v1/auth/login", data={"username": dni, "password": password})
+
+
+async def test_new_dni_gets_an_account_with_the_store_defaults_and_an_access_code(client, admin):
     response = await open_account(client, admin)
 
     assert response.status_code == 201
@@ -93,15 +105,72 @@ async def test_new_dni_gets_an_account_with_the_store_defaults_and_credentials(c
         "late_tea": "15.0000000",
         "max_weeks": 4,
         "status": "ACTIVE",
+        "portal_linked": False,
         "created_at": "...",
     }
-    credentials = body["credentials"]
-    assert credentials["username"] == "45678912"
-    signed_in = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "45678912", "password": credentials["temporary_password"]},
+    access_code = body["access_code"]
+    expires_in = datetime.fromisoformat(access_code["expires_at"]) - datetime.now(UTC)
+    assert len(access_code["code"]) == 10
+    assert timedelta(hours=47) < expires_in <= timedelta(hours=48)
+
+
+async def test_the_code_lets_the_customer_choose_a_password_and_links_the_store(client, admin):
+    opened = (await open_account(client, admin)).json()
+    code = opened["access_code"]["code"]
+
+    # Typed by hand: lowercase and a hyphen in the middle are still the same code.
+    redeemed = await redeem(client, f"{code[:5]}-{code[5:]}".lower())
+    signed_in = await sign_in(client)
+    account = await client.get(f"/api/v1/customers/{opened['account']['id']}", headers=admin)
+
+    assert redeemed.status_code == 204
+    assert (signed_in.status_code, signed_in.json()["must_change_password"]) == (200, False)
+    assert account.json()["portal_linked"] is True
+
+
+async def test_a_code_needs_its_own_dni_and_works_only_once(client, admin):
+    code = (await open_account(client, admin)).json()["access_code"]["code"]
+    await open_account(client, admin, dni="70000002", first_names="Luis", last_names="Torres")
+
+    of_another_person = await redeem(client, code, dni="70000002")
+    of_nobody = await redeem(client, code, dni="11111111")
+    made_up = await redeem(client, "AAAAAAAAAA")
+    short_password = await redeem(client, code, password="corta")
+    first_use = await redeem(client, code)
+    second_use = await redeem(client, code, password="otra-clave-segura")
+
+    for refused in (of_another_person, of_nobody, made_up, second_use):
+        assert (refused.status_code, refused.json()["code"], refused.json()["field"]) == (
+            422,
+            "INVALID_ACCESS_CODE",
+            "code",
+        )
+    assert (short_password.json()["code"], short_password.json()["field"]) == (
+        "INVALID_PASSWORD",
+        "new_password",
     )
-    assert signed_in.json()["must_change_password"] is True
+    assert first_use.status_code == 204
+    assert (await sign_in(client, password="otra-clave-segura")).status_code == 401
+
+
+async def test_an_expired_or_replaced_code_is_refused(client, admin):
+    opened = (await open_account(client, admin)).json()
+    old_code = opened["access_code"]["code"]
+    reissued = await client.post(
+        f"/api/v1/customers/{opened['account']['id']}/access-code", headers=admin
+    )
+    new_code = reissued.json()["code"]
+
+    replaced = await redeem(client, old_code)
+    application.dependency_overrides[get_business_now] = lambda: (
+        datetime.now(UTC) + timedelta(hours=49)
+    )
+    expired = await redeem(client, new_code)
+
+    assert (reissued.status_code, new_code != old_code) == (200, True)
+    for refused in (replaced, expired):
+        assert (refused.status_code, refused.json()["code"]) == (422, "INVALID_ACCESS_CODE")
+    assert (await sign_in(client)).status_code == 401
 
 
 async def test_given_conditions_replace_the_defaults(client, admin):
@@ -154,7 +223,9 @@ async def test_new_dni_needs_the_names(client, admin):
     assert (response.json()["code"], response.json()["field"]) == ("INVALID_NAME", "first_names")
 
 
-async def test_person_from_another_store_keeps_their_user(client, admin, other_admin):
+async def test_person_from_another_store_keeps_their_user_and_gets_a_code(
+    client, admin, other_admin
+):
     first = await open_account(client, admin)
 
     lookup = await client.get("/api/v1/customers/lookup?dni=45678912", headers=other_admin)
@@ -172,8 +243,72 @@ async def test_person_from_another_store_keeps_their_user(client, admin, other_a
         "notice": "PERSON_HAS_ACCOUNT",
     }
     assert second.status_code == 201
-    assert second.json()["credentials"] is None
+    assert second.json()["access_code"]["code"] != first.json()["access_code"]["code"]
+    assert second.json()["account"]["portal_linked"] is False
     assert second.json()["account"]["customer_id"] == first.json()["account"]["customer_id"]
+
+
+async def test_a_code_redeemed_without_a_session_leaves_only_its_store_linked(
+    client, admin, other_admin
+):
+    first = (await open_account(client, admin)).json()
+    await redeem(client, first["access_code"]["code"])
+    second = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+    second_path = f"/api/v1/customers/{second['account']['id']}"
+
+    async def linked() -> tuple[bool, bool]:
+        """Whether each store sees its account in the customer's portal."""
+        in_first = await client.get(f"/api/v1/customers/{first['account']['id']}", headers=admin)
+        in_second = await client.get(second_path, headers=other_admin)
+        return in_first.json()["portal_linked"], in_second.json()["portal_linked"]
+
+    after_opening = await linked()
+    session = {"Authorization": f"Bearer {(await sign_in(client)).json()['access_token']}"}
+    added = await client.post(
+        "/api/v1/me/stores/link", json={"code": second["access_code"]["code"]}, headers=session
+    )
+    after_adding = await linked()
+    still_signed_in = await client.get("/api/v1/me/stores", headers=session)
+    # The customer forgets the password and recovers it with a new code of the second store.
+    new_code = (await client.post(f"{second_path}/access-code", headers=other_admin)).json()
+    recovered = await redeem(client, new_code["code"], password="otra-clave-segura")
+    after_recovering = await linked()
+    # Whoever knew the previous password keeps a token: it must stop working at once.
+    old_session = await client.get("/api/v1/me/stores", headers=session)
+    old_session_link = await client.post(
+        "/api/v1/me/stores/link", json={"code": "AAAAAAAAAA"}, headers=session
+    )
+    new_sign_in = await sign_in(client, password="otra-clave-segura")
+    new_session = await client.get(
+        "/api/v1/me/stores",
+        headers={"Authorization": f"Bearer {new_sign_in.json()['access_token']}"},
+    )
+
+    assert after_opening == (True, False)
+    assert (added.status_code, after_adding) == (204, (True, True))
+    assert still_signed_in.status_code == 200
+    assert (recovered.status_code, after_recovering) == (204, (False, True))
+    assert (old_session.status_code, old_session_link.status_code) == (401, 401)
+    assert (await sign_in(client)).status_code == 401
+    assert (new_sign_in.status_code, new_session.status_code) == (200, 200)
+
+
+async def test_only_the_customer_of_the_code_adds_the_store(client, admin):
+    rosa = (await open_account(client, admin)).json()
+    await redeem(client, rosa["access_code"]["code"])
+    luis = (
+        await open_account(client, admin, dni="70000002", first_names="Luis", last_names="Torres")
+    ).json()
+    link = {"code": luis["access_code"]["code"]}
+    as_rosa = {"Authorization": f"Bearer {(await sign_in(client)).json()['access_token']}"}
+
+    stolen = await client.post("/api/v1/me/stores/link", json=link, headers=as_rosa)
+    as_store = await client.post("/api/v1/me/stores/link", json=link, headers=admin)
+    without_token = await client.post("/api/v1/me/stores/link", json=link)
+
+    assert (stolen.status_code, stolen.json()["code"]) == (422, "INVALID_ACCESS_CODE")
+    assert (as_store.status_code, without_token.status_code) == (403, 401)
+    assert (await redeem(client, luis["access_code"]["code"], dni="70000002")).status_code == 204
 
 
 async def test_lookup_in_the_own_store_returns_the_account(client, admin):
@@ -239,26 +374,13 @@ async def test_deactivated_account_stays_listed_as_inactive(client, admin):
     assert response.json()["status"] == "INACTIVE"
 
 
-async def test_reset_password_gives_a_new_temporary_password(client, admin):
-    account_id = (await open_account(client, admin)).json()["account"]["id"]
-
-    response = await client.post(f"/api/v1/customers/{account_id}/reset-password", headers=admin)
-    signed_in = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "45678912", "password": response.json()["temporary_password"]},
-    )
-
-    assert response.json()["username"] == "45678912"
-    assert signed_in.json()["must_change_password"] is True
-
-
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
         ("GET", "", None),
         ("PUT", "", {"first_names": "x"}),
         ("PATCH", "/deactivate", None),
-        ("POST", "/reset-password", None),
+        ("POST", "/access-code", None),
     ],
 )
 async def test_account_of_another_store_is_not_found(

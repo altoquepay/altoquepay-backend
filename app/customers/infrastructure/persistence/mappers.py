@@ -44,6 +44,9 @@ def account_to_domain(model: StoreCustomerModel) -> StoreCustomer:
         ),
         status=AccountStatus(model.status),
         created_at=model.created_at,
+        portal_linked_at=model.portal_linked_at,
+        access_code_hash=model.access_code_hash,
+        access_code_expires_at=model.access_code_expires_at,
         id=model.id,
     )
 
@@ -60,4 +63,7 @@ def copy_account_to_model(account: StoreCustomer, model: StoreCustomerModel) -> 
     model.payment_day = conditions.payment_day
     model.max_weeks = conditions.max_weeks
     model.status = account.status.value
+    model.portal_linked_at = account.portal_linked_at
+    model.access_code_hash = account.access_code_hash
+    model.access_code_expires_at = account.access_code_expires_at
     return model

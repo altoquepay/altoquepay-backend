@@ -21,6 +21,7 @@ class JwtTokenService(TokenService):
             "sub": str(claims.user_id),
             "role": claims.role.value,
             "must_change_password": claims.must_change_password,
+            "password_version": claims.password_version,
             "iat": now,
             "exp": now + self._lifetime,
         }

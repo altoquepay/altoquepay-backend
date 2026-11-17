@@ -6,10 +6,6 @@ from app.iam.domain.model.aggregates.password_reset_token import PasswordResetTo
 from app.iam.domain.model.aggregates.user import User, normalize_username
 from app.iam.domain.model.value_objects.email import Email
 from app.iam.domain.model.value_objects.password import ensure_valid_password
-from app.iam.domain.services.temporary_password import (
-    TEMPORARY_PASSWORD_ALPHABET,
-    generate_temporary_password,
-)
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Dni, Role
 
@@ -55,11 +51,11 @@ def test_store_admin_needs_a_full_name(full_name):
     assert (error.value.code, error.value.field) == ("INVALID_FULL_NAME", "full_name")
 
 
-def test_customer_signs_in_with_the_dni_and_must_change_the_temporary_password():
+def test_customer_signs_in_with_the_dni_and_has_no_temporary_password():
     user = User.customer(Dni("01234567"), "hash")
 
     assert (user.username, user.role, user.store_id) == ("01234567", Role.CUSTOMER, None)
-    assert user.must_change_password
+    assert not user.must_change_password
 
 
 def test_only_a_store_admin_has_a_store():
@@ -70,34 +66,26 @@ def test_only_a_store_admin_has_a_store():
 
 
 def test_changing_the_password_lifts_the_temporary_password_block():
-    user = User.customer(Dni("01234567"), "temporary")
+    user = User.system_admin(Email("admin@altoquepay.pe"), "temporary")
+    assert user.must_change_password
 
     user.change_password("chosen")
 
     assert (user.password_hash, user.must_change_password) == ("chosen", False)
 
 
-def test_a_temporary_password_must_be_changed():
-    user = User.store_admin(Email("rosa@bodega.pe"), "Rosa", "chosen", store_id=3)
+def test_every_password_change_gets_a_new_version():
+    user = User.customer(Dni("01234567"), "nobody knows it")
 
-    user.assign_temporary_password("temporary")
+    user.change_password("chosen")
+    user.change_password("chosen again")
 
-    assert (user.password_hash, user.must_change_password) == ("temporary", True)
+    assert user.password_version == 2
 
 
 def test_usernames_are_compared_in_lowercase():
     assert normalize_username(" Rosa@Bodega.pe ") == "rosa@bodega.pe"
     assert normalize_username("01234567") == "01234567"
-
-
-def test_temporary_passwords_are_random_and_easy_to_dictate():
-    passwords = {generate_temporary_password() for _ in range(50)}
-
-    assert len(passwords) == 50
-    for password in passwords:
-        ensure_valid_password(password)
-        assert set(password) <= set(TEMPORARY_PASSWORD_ALPHABET)
-        assert not set(password) & set("0O1lI")
 
 
 def test_reset_token_works_once_and_until_it_expires():

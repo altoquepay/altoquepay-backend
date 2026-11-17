@@ -1,9 +1,10 @@
+import secrets
+
 from app.iam.application.ports.password_hasher import PasswordHasher
 from app.iam.domain.model.aggregates.user import User, normalize_username
 from app.iam.domain.model.value_objects.email import Email
 from app.iam.domain.model.value_objects.password import ensure_valid_password
 from app.iam.domain.repositories.user_repository import UserRepository
-from app.iam.domain.services.temporary_password import generate_temporary_password
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Dni
 
@@ -30,8 +31,8 @@ class UserAccountService:
         await self._users.add(user)
         return user
 
-    async def create_customer_user(self, dni: str) -> tuple[User, str]:
-        """Return the new user and its temporary password, which is never stored in plain text."""
+    async def create_customer_user(self, dni: str) -> User:
+        """Return the new user of a customer, who cannot sign in until they choose a password."""
         valid_dni = Dni(dni.strip())
         if await self._users.exists_by_username(valid_dni.value):
             raise BusinessError(
@@ -40,20 +41,11 @@ class UserAccountService:
                 field="dni",
                 status=409,
             )
-        temporary_password = generate_temporary_password()
-        user = User.customer(valid_dni, await self._hasher.hash(temporary_password))
+        # A password nobody knows: the customer sets theirs by redeeming a store's access code.
+        unknown_password = secrets.token_urlsafe(32)
+        user = User.customer(valid_dni, await self._hasher.hash(unknown_password))
         await self._users.add(user)
-        return user, temporary_password
-
-    async def reset_password(self, user_id: int) -> tuple[User, str]:
-        """Return the user and its new temporary password."""
-        user = await self._users.find_by_id(user_id)
-        if user is None:
-            raise BusinessError("NOT_FOUND", "The user does not exist.", status=404)
-        temporary_password = generate_temporary_password()
-        user.assign_temporary_password(await self._hasher.hash(temporary_password))
-        await self._users.update(user)
-        return user, temporary_password
+        return user
 
     async def find_by_username(self, username: str) -> User | None:
         return await self._users.find_by_username(normalize_username(username))

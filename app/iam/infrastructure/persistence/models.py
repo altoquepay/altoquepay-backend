@@ -24,6 +24,8 @@ class UserModel(Base):
     store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id"))
     must_change_password: Mapped[bool]
     is_active: Mapped[bool] = mapped_column(server_default="true")
+    # Incremented on every password change; tokens issued with an older one are refused.
+    password_version: Mapped[int] = mapped_column(server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -12,6 +13,7 @@ from app.iam.application.command_services.password_recovery_service import (
 )
 from app.iam.application.query_services.user_query_service import UserQueryService
 from app.iam.domain.model.commands.change_password_command import ChangePasswordCommand
+from app.iam.domain.model.commands.redeem_access_code_command import RedeemAccessCodeCommand
 from app.iam.domain.model.commands.reset_forgotten_password_command import (
     ResetForgottenPasswordCommand,
 )
@@ -26,8 +28,10 @@ from app.iam.interfaces.rest.resources.auth_resources import (
     ChangePasswordResource,
     CurrentUserResource,
     ForgotPasswordResource,
+    RedeemAccessCodeResource,
     ResetPasswordResource,
 )
+from app.shared.interfaces.rest.business_date import get_business_now
 from app.shared.interfaces.rest.security import CurrentUser, get_token_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -106,3 +110,19 @@ async def reset_password(
 ) -> None:
     """Choose a new password with the token of the reset link. Each link works once."""
     await service.reset(ResetForgottenPasswordCommand(resource.token, resource.new_password))
+
+
+@router.post("/redeem-access-code", status_code=204)
+async def redeem_access_code(
+    resource: RedeemAccessCodeResource,
+    service: Annotated[PasswordRecoveryService, Depends(get_password_recovery_service)],
+    now: Annotated[datetime, Depends(get_business_now)],
+) -> None:
+    """Let a customer choose their password with the access code a store handed them.
+
+    It links that store to their portal and unlinks their other stores, since only the store of
+    the code vouches for who holds the new password. A customer who knows their password adds
+    a store with /me/stores/link instead.
+    """
+    command = RedeemAccessCodeCommand(resource.dni, resource.code, resource.new_password)
+    await service.reset_with_access_code(command, now)

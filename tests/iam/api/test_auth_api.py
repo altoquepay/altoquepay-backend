@@ -12,6 +12,9 @@ from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
+from app.iam.application.command_services.user_account_service import UserAccountService
+from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
+from app.iam.infrastructure.security.argon2_password_hasher import Argon2PasswordHasher
 from app.iam.interfaces.acl.iam_facade import IamFacade
 from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
 from app.main import app as application
@@ -23,7 +26,10 @@ from tests.stored_store import add_store
 
 ADMIN_EMAIL = "rosa@bodega-test.pe"
 ADMIN_PASSWORD = "clave-de-rosa"
+SYSTEM_ADMIN_EMAIL = "admin@altoquepay-test.pe"
+FIRST_PASSWORD = "clave-inicial"
 CUSTOMER_DNI = "70000001"
+CUSTOMER_PASSWORD = "clave-de-cliente"
 
 
 class RollbackUnitOfWork(UnitOfWork):
@@ -65,11 +71,24 @@ async def store_admin_id(unit_of_work, store_id):
 
 
 @pytest.fixture
-async def customer_credentials(unit_of_work):
-    credentials = await IamFacade(unit_of_work).create_customer_user(CUSTOMER_DNI)
-    customer = Customer(Dni(CUSTOMER_DNI), "Rosa", "Quispe", credentials.user_id)
+async def system_admin(unit_of_work) -> None:
+    """The first administrator, created with a password from the settings that they must change."""
+    accounts = UserAccountService(UserRepositoryImpl(unit_of_work.session), Argon2PasswordHasher())
+    await accounts.create_first_system_admin(SYSTEM_ADMIN_EMAIL, FIRST_PASSWORD)
+
+
+@pytest.fixture
+async def customer_id(unit_of_work) -> int:
+    """A customer who already chose their password with the access code of a store."""
+    users = UserRepositoryImpl(unit_of_work.session)
+    user = await users.find_by_id(await IamFacade(unit_of_work).create_customer_user(CUSTOMER_DNI))
+    assert user is not None and user.id is not None
+    user.change_password(await Argon2PasswordHasher().hash(CUSTOMER_PASSWORD))
+    await users.update(user)
+    customer = Customer(Dni(CUSTOMER_DNI), "Rosa", "Quispe", user.id)
     await CustomerRepositoryImpl(unit_of_work.session).add(customer)
-    return credentials, customer.id
+    assert customer.id is not None
+    return customer.id
 
 
 async def login(client, username: str, password: str):
@@ -111,33 +130,38 @@ async def test_wrong_password_is_rejected(client, store_admin_id):
     assert response.json()["code"] == "INVALID_CREDENTIALS"
 
 
-async def test_customer_is_blocked_until_changing_the_temporary_password(
-    client, customer_credentials
-):
-    signed_in = await login(client, CUSTOMER_DNI, customer_credentials[0].temporary_password)
+async def test_system_admin_is_blocked_until_changing_the_first_password(client, system_admin):
+    signed_in = await login(client, SYSTEM_ADMIN_EMAIL, FIRST_PASSWORD)
     blocked = await client.get("/api/v1/bcrp-caps/current", headers=bearer(signed_in))
     me = await client.get("/api/v1/auth/me", headers=bearer(signed_in))
     changed = await client.post(
         "/api/v1/auth/change-password",
-        json={
-            "current_password": customer_credentials[0].temporary_password,
-            "new_password": "mi-clave-segura",
-        },
+        json={"current_password": FIRST_PASSWORD, "new_password": "mi-clave-segura"},
         headers=bearer(signed_in),
     )
     unblocked = await client.get("/api/v1/bcrp-caps/current", headers=bearer(changed))
 
     assert signed_in.json()["must_change_password"] is True
     assert (blocked.status_code, blocked.json()["code"]) == (403, "PASSWORD_CHANGE_REQUIRED")
-    customer_id = customer_credentials[1]
-    assert (me.json()["customer_id"], me.json()["must_change_password"]) == (customer_id, True)
+    assert (me.json()["role"], me.json()["must_change_password"]) == ("SYSTEM_ADMIN", True)
     assert (changed.status_code, changed.json()["must_change_password"]) == (200, False)
     assert unblocked.status_code != 403
-    assert (await login(client, CUSTOMER_DNI, "mi-clave-segura")).status_code == 200
+    assert (await login(client, SYSTEM_ADMIN_EMAIL, "mi-clave-segura")).status_code == 200
 
 
-async def test_wrong_current_password_is_reported_on_its_field(client, customer_credentials):
-    signed_in = await login(client, CUSTOMER_DNI, customer_credentials[0].temporary_password)
+async def test_customer_signs_in_with_the_dni_and_reads_their_profile(client, customer_id):
+    signed_in = await login(client, CUSTOMER_DNI, CUSTOMER_PASSWORD)
+    me = await client.get("/api/v1/auth/me", headers=bearer(signed_in))
+
+    assert (signed_in.json()["role"], signed_in.json()["must_change_password"]) == (
+        "CUSTOMER",
+        False,
+    )
+    assert (me.json()["username"], me.json()["customer_id"]) == (CUSTOMER_DNI, customer_id)
+
+
+async def test_wrong_current_password_is_reported_on_its_field(client, customer_id):
+    signed_in = await login(client, CUSTOMER_DNI, CUSTOMER_PASSWORD)
 
     response = await client.post(
         "/api/v1/auth/change-password",
