@@ -65,11 +65,10 @@ class CustomerPortalService:
         self._billing = billing
 
     async def my_stores(self, user_id: int) -> list[CustomerStore]:
-        """Return every store where the customer has an account, active or not."""
-        customer_id = await self._accounts.customer_of_user(user_id)
+        """Return every store the customer linked to their portal, active or not."""
         return [
             CustomerStore(account, await self._stores.summary(account.store_id))
-            for account in await self._accounts.accounts_of_person(customer_id)
+            for account in await self._linked_accounts(user_id)
         ]
 
     async def overview(self, user_id: int, store_id: int) -> AccountOverview:
@@ -106,8 +105,20 @@ class CustomerPortalService:
 
     async def _account_in(self, user_id: int, store_id: int) -> AccountSummary:
         """Return the customer's account in the store; another store's data is never reached."""
-        customer_id = await self._accounts.customer_of_user(user_id)
-        for account in await self._accounts.accounts_of_person(customer_id):
+        for account in await self._linked_accounts(user_id):
             if account.store_id == store_id:
                 return account
         raise not_found("store")
+
+    async def _linked_accounts(self, user_id: int) -> list[AccountSummary]:
+        """Return the accounts linked with their store's access code, the only ones in the portal.
+
+        An account a store just opened stays out until the customer redeems that store's code,
+        so no store can make its account appear in the portal of whoever holds the password.
+        """
+        customer_id = await self._accounts.customer_of_user(user_id)
+        return [
+            account
+            for account in await self._accounts.accounts_of_person(customer_id)
+            if account.portal_linked
+        ]
