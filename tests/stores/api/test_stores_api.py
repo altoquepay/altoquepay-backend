@@ -11,7 +11,6 @@ from httpx import ASGITransport, AsyncClient
 from app.main import app as application
 from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_today
-from tests.authorization import authorization
 
 REGISTRATION = {
     "business_name": "Bodega La Esquina",
@@ -168,21 +167,20 @@ async def test_invalid_profile_is_rejected_on_its_field(client, invalid_values, 
     assert (response.json()["code"], response.json()["field"]) == (code, field)
 
 
-async def test_profile_needs_the_administrator_of_a_store(client):
-    system_admin = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+async def test_profile_needs_the_administrator_of_a_store(client, stored_system_admin):
+    system_admin = stored_system_admin
 
     assert (await client.get("/api/v1/store/profile")).status_code == 401
     assert (await client.get("/api/v1/store/profile", headers=system_admin)).status_code == 403
 
 
-SYSTEM_ADMIN = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
-
-
-async def test_system_admin_lists_stores_newest_first_with_their_customers(client):
+async def test_system_admin_lists_stores_newest_first_with_their_customers(
+    client, stored_system_admin
+):
     await register(client)
     await register(client, ruc="10456781235", email="otra@bodega-stores-test.pe")
 
-    response = await client.get("/api/v1/admin/stores?page=1&size=2", headers=SYSTEM_ADMIN)
+    response = await client.get("/api/v1/admin/stores?page=1&size=2", headers=stored_system_admin)
 
     assert response.status_code == 200
     page = response.json()
@@ -191,22 +189,24 @@ async def test_system_admin_lists_stores_newest_first_with_their_customers(clien
     assert page["items"][0]["customers_count"] == 0
 
 
-async def test_system_admin_deactivates_and_reactivates_a_store(client):
+async def test_system_admin_deactivates_and_reactivates_a_store(client, stored_system_admin):
     store_id = (await register(client)).json()["id"]
 
     deactivated = await client.patch(
-        f"/api/v1/admin/stores/{store_id}/deactivate", headers=SYSTEM_ADMIN
+        f"/api/v1/admin/stores/{store_id}/deactivate", headers=stored_system_admin
     )
     reactivated = await client.patch(
-        f"/api/v1/admin/stores/{store_id}/reactivate", headers=SYSTEM_ADMIN
+        f"/api/v1/admin/stores/{store_id}/reactivate", headers=stored_system_admin
     )
 
     assert (deactivated.status_code, deactivated.json()["status"]) == (200, "INACTIVE")
     assert (reactivated.status_code, reactivated.json()["status"]) == (200, "ACTIVE")
 
 
-async def test_unknown_store_cannot_be_deactivated(client):
-    response = await client.patch("/api/v1/admin/stores/999999/deactivate", headers=SYSTEM_ADMIN)
+async def test_unknown_store_cannot_be_deactivated(client, stored_system_admin):
+    response = await client.patch(
+        "/api/v1/admin/stores/999999/deactivate", headers=stored_system_admin
+    )
 
     assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
 
@@ -220,14 +220,14 @@ async def test_store_administrator_cannot_manage_stores(client):
     ).status_code == 403
 
 
-async def test_deactivated_store_is_blocked_at_once_until_reactivated(client):
+async def test_deactivated_store_is_blocked_at_once_until_reactivated(client, stored_system_admin):
     admin = await registered_admin(client)
     store_id = (await client.get("/api/v1/store/profile", headers=admin)).json()["id"]
 
-    await client.patch(f"/api/v1/admin/stores/{store_id}/deactivate", headers=SYSTEM_ADMIN)
+    await client.patch(f"/api/v1/admin/stores/{store_id}/deactivate", headers=stored_system_admin)
     blocked_login = await login(client)
     blocked_profile = await client.get("/api/v1/store/profile", headers=admin)
-    await client.patch(f"/api/v1/admin/stores/{store_id}/reactivate", headers=SYSTEM_ADMIN)
+    await client.patch(f"/api/v1/admin/stores/{store_id}/reactivate", headers=stored_system_admin)
 
     assert (blocked_login.status_code, blocked_login.json()["code"]) == (403, "STORE_INACTIVE")
     assert (blocked_profile.status_code, blocked_profile.json()["code"]) == (403, "STORE_INACTIVE")

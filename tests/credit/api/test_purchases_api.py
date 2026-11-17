@@ -225,8 +225,8 @@ async def test_purchase_dated_in_a_cycle_already_cut_is_rejected(client, setup, 
     assert (response.status_code, response.json()["code"]) == (409, "CYCLE_CLOSED")
 
 
-async def test_only_store_administrators_register_purchases(client, setup):
-    customer = authorization(role="CUSTOMER", store_id=None, customer_id=1)
+async def test_only_store_administrators_register_purchases(client, setup, stored_customer_user):
+    customer = stored_customer_user
 
     assert (await client.post("/api/v1/purchases", json=report_test_3(setup))).status_code == 401
     response = await client.post("/api/v1/purchases", json=report_test_3(setup), headers=customer)

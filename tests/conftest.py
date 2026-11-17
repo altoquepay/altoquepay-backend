@@ -24,11 +24,13 @@ os.environ["DATABASE_URL"] = test_database_url.render_as_string(hide_password=Fa
 
 # Imported only now: the engine reads DATABASE_URL when its module loads.
 from app.iam.domain.model.aggregates.user import User  # noqa: E402
+from app.iam.domain.model.value_objects.email import Email  # noqa: E402
 from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl  # noqa: E402
-from app.shared.domain.value_objects import Role  # noqa: E402
+from app.shared.domain.value_objects import Dni, Role  # noqa: E402
 from app.shared.infrastructure.database import session_factory  # noqa: E402
 from app.shared.infrastructure.unit_of_work import UnitOfWork  # noqa: E402
 from tests.authorization import authorization  # noqa: E402
+from tests.stored_store import add_store  # noqa: E402
 
 
 async def create_test_database_if_missing() -> None:
@@ -74,3 +76,20 @@ async def stored_system_admin(unit_of_work) -> dict[str, str]:
     admin = User("system-admin@test.pe", "unused-hash", Role.SYSTEM_ADMIN)
     await UserRepositoryImpl(unit_of_work.session).add(admin)
     return authorization(sub=str(admin.id), role="SYSTEM_ADMIN", store_id=None)
+
+
+@pytest.fixture
+async def stored_store_admin(unit_of_work) -> dict[str, str]:
+    """Headers of the administrator of a new store, both stored."""
+    store = await add_store(unit_of_work, ruc="20999999981")
+    admin = User.store_admin(Email("admin@tienda-test.pe"), "Admin", "unused-hash", store.id)
+    await UserRepositoryImpl(unit_of_work.session).add(admin)
+    return authorization(sub=str(admin.id), store_id=store.id)
+
+
+@pytest.fixture
+async def stored_customer_user(unit_of_work) -> dict[str, str]:
+    """Headers of a customer's stored user, for routes a customer must not reach."""
+    user = User.customer(Dni("40000009"), "unused-hash")
+    await UserRepositoryImpl(unit_of_work.session).add(user)
+    return authorization(sub=str(user.id), role="CUSTOMER", store_id=None)

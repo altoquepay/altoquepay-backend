@@ -205,6 +205,20 @@ async def test_forgotten_password_is_reset_through_the_emailed_link(
     assert (await login(client, ADMIN_EMAIL, ADMIN_PASSWORD)).status_code == 401
 
 
+async def test_an_admin_token_issued_before_a_reset_stops_working(client, notifier, store_admin_id):
+    stolen = bearer(await login(client, ADMIN_EMAIL, ADMIN_PASSWORD))
+    await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+    token = parse_qs(urlparse(notifier.sent[0][1]).query)["token"][0]
+    await client.post(
+        "/api/v1/auth/reset-password", json={"token": token, "new_password": "clave-nueva"}
+    )
+
+    profile = await client.get("/api/v1/store/profile", headers=stolen)
+    me = await client.get("/api/v1/auth/me", headers=stolen)
+
+    assert (profile.status_code, me.status_code) == (401, 401)
+
+
 async def test_an_ip_that_used_all_its_attempts_gets_no_more_reset_emails(
     client, notifier, store_admin_id
 ):

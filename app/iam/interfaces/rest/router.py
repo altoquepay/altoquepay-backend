@@ -33,12 +33,12 @@ from app.iam.interfaces.rest.resources.auth_resources import (
 )
 from app.iam.interfaces.rest.sign_in_attempts import limit_sign_in_attempts
 from app.shared.interfaces.rest.business_date import get_business_now
-from app.shared.interfaces.rest.security import CurrentUser, get_token_user
+from app.shared.interfaces.rest.security import CurrentUser, get_signed_in_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # change-password and me must stay reachable while a temporary password blocks everything else.
-TokenUser = Annotated[CurrentUser, Depends(get_token_user)]
+TokenUser = Annotated[CurrentUser, Depends(get_signed_in_user)]
 
 
 def to_access_token_resource(signed_in: SignedInUser) -> AccessTokenResource:

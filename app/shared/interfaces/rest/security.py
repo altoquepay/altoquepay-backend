@@ -1,8 +1,8 @@
 """FastAPI dependencies that validate the JWT issued by the iam context.
 
-They read only the token claims, so no bounded context depends on the iam tables to authorize.
-The two exceptions ask a facade on every request: get_store_id, whether the store is still
-active, and get_customer, whether the customer still has the password of the token.
+No bounded context depends on the iam tables to authorize: two facades are asked on every
+request. get_signed_in_user asks iam whether the user still has the password of the token, and
+get_store_id asks stores whether the store is still active.
 """
 
 from collections.abc import Awaitable, Callable
@@ -38,7 +38,7 @@ class CurrentUser:
 
 
 async def get_token_user(token: Annotated[str, Depends(bearer_token)]) -> CurrentUser:
-    """Return the token's user. Only change-password and me may use this directly."""
+    """Return the claims of a valid token. Routes use get_signed_in_user, which checks more."""
     try:
         claims = jwt.decode(
             token,
@@ -60,7 +60,27 @@ async def get_token_user(token: Annotated[str, Depends(bearer_token)]) -> Curren
         ) from error
 
 
-async def get_current_user(user: Annotated[CurrentUser, Depends(get_token_user)]) -> CurrentUser:
+async def get_signed_in_user(
+    user: Annotated[CurrentUser, Depends(get_token_user)],
+    unit_of_work: Annotated[UnitOfWork, Depends(get_unit_of_work)],
+) -> CurrentUser:
+    """Return the token's user, unless their password changed after the token was issued.
+
+    The version is read on every request, so a reset, a change or a store's access code blocks
+    the tokens of whoever knew the previous password. Only change-password and me use this
+    directly, since they must work before a temporary password is changed.
+    """
+    iam = IamFacade(unit_of_work)
+    if not await iam.is_password_current(int(user.user_id), user.password_version):
+        raise HTTPException(
+            401, "Could not validate credentials.", headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user
+
+
+async def get_current_user(
+    user: Annotated[CurrentUser, Depends(get_signed_in_user)],
+) -> CurrentUser:
     """Return the token's user, unless they still have to change their temporary password."""
     if user.must_change_password:
         raise BusinessError(
@@ -98,18 +118,4 @@ async def get_store_id(
     return user.store_id
 
 
-async def get_customer(
-    user: Annotated[CurrentUser, Depends(require_role(Role.CUSTOMER))],
-    unit_of_work: Annotated[UnitOfWork, Depends(get_unit_of_work)],
-) -> CurrentUser:
-    """Return the signed-in customer, unless their password changed after the token was issued.
-
-    The version is read on every request, so recovering the access with a store's code blocks
-    the tokens of whoever knew the previous password.
-    """
-    iam = IamFacade(unit_of_work)
-    if not await iam.is_password_current(int(user.user_id), user.password_version):
-        raise HTTPException(
-            401, "Could not validate credentials.", headers={"WWW-Authenticate": "Bearer"}
-        )
-    return user
+get_customer = require_role(Role.CUSTOMER)
