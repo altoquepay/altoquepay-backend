@@ -3,8 +3,6 @@
 Every test shares one Unit of Work that never commits, images included.
 """
 
-from http import HTTPStatus
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -208,8 +206,7 @@ async def test_body_over_3_mb_is_refused_before_it_is_read(client, admin):
         headers=admin,
     )
 
-    # The code is the status name, which Python 3.13 renamed to CONTENT_TOO_LARGE.
-    assert (response.status_code, response.json()["code"]) == (413, HTTPStatus(413).name)
+    assert (response.status_code, response.json()["code"]) == (413, "CONTENT_TOO_LARGE")
 
 
 @pytest.mark.parametrize(
