@@ -109,6 +109,7 @@ class UpcomingDueResource(BaseModel):
 class DashboardResource(BaseModel):
     """bcrp_cap is null when no cap is in force today: a system admin must register it.
 
+    overdue_amount adds up the overdue installments and the overdue cycle statements.
     upcoming lists what falls due in the next 7 days, today included, by due date. next_cutoff
     is the earliest cutoff among the cycles with purchases still open, or null if none is.
     """
@@ -116,6 +117,7 @@ class DashboardResource(BaseModel):
     active_customers: int
     outstanding_principal: Decimal
     overdue_installments: int
+    overdue_statements: int
     overdue_amount: Decimal
     purchases_this_month: PurchaseTotalsResource
     payments_this_month: PaymentTotalsResource

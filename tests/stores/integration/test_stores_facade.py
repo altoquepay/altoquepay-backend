@@ -5,16 +5,8 @@ from decimal import Decimal
 import pytest
 
 from app.shared.domain.errors import BusinessError
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork
 from app.stores.interfaces.acl.stores_facade import DefaultConditions, StoresFacade, StoreSummary
 from tests.stored_store import add_store
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 async def test_status_of_a_store(unit_of_work):

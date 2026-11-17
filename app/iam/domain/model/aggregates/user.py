@@ -19,7 +19,7 @@ class User:
     """Administrators sign in with their email and customers with their DNI.
 
     password_version counts the password changes. A token carries the one it was issued with,
-    so a customer's older tokens stop working once the password changes.
+    so a user's older tokens stop working once the password changes.
     """
 
     username: str

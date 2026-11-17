@@ -17,22 +17,10 @@ from app.billing.interfaces.acl.billing_facade import BillingFacade
 from app.credit.domain.model.aggregates.purchase import PaymentMode
 from app.credit.interfaces.acl.credit_facade import CreditFacade
 from app.main import app as application
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from tests.authorization import authorization
 from tests.credit.stored_credit import LIMA, add_credit_setup, add_purchase
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture

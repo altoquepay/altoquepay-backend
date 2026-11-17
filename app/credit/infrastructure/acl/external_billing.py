@@ -11,3 +11,6 @@ class ExternalBilling(CycleAssigner):
     async def cycle_of(self, account_id: int, purchased_at: datetime, today: date) -> AssignedCycle:
         cycle = await self._billing_facade.get_or_open_cycle(account_id, purchased_at, today)
         return AssignedCycle(cycle.cycle_id, cycle.payment_date)
+
+    async def ensure_open(self, cycle_id: int, today: date) -> None:
+        await self._billing_facade.ensure_cycle_open(cycle_id, today)

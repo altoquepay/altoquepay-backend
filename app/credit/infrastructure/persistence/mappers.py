@@ -57,6 +57,8 @@ def to_domain(model: PurchaseModel) -> Purchase:
         installments=[installment_to_domain(installment) for installment in model.installments],
         status=PurchaseStatus(model.status),
         payment_id=model.payment_id,
+        voided_at=model.voided_at,
+        voided_by=model.voided_by,
         id=model.id,
     )
 
@@ -113,9 +115,12 @@ def amount_or_none(money: Money | None):
 
 
 def copy_payments_to_model(purchase: Purchase, model: PurchaseModel) -> None:
-    """Copy what changes after registration: the statuses and the payments that settled them."""
+    """Copy what changes after registration: the statuses, the payments that settled them and
+    the voiding."""
     model.status = purchase.status.value
     model.payment_id = purchase.payment_id
+    model.voided_at = purchase.voided_at
+    model.voided_by = purchase.voided_by
     for installment, installment_model in zip(
         purchase.installments, model.installments, strict=True
     ):

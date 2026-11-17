@@ -18,6 +18,7 @@ from app.regulation.interfaces.rest.router import router as regulation_router
 from app.reporting.interfaces.rest.router import router as reporting_router
 from app.shared.infrastructure.config import get_settings
 from app.shared.infrastructure.database import engine
+from app.shared.interfaces.rest.body_size_limit import BodySizeLimit
 from app.shared.interfaces.rest.error_handlers import register_error_handlers
 from app.stores.interfaces.rest.router import router as stores_router
 
@@ -36,6 +37,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(BodySizeLimit)
 register_error_handlers(app)
 app.include_router(iam_router, prefix="/api/v1")
 app.include_router(regulation_router, prefix="/api/v1")

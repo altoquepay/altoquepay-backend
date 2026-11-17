@@ -17,8 +17,7 @@ import app.credit.interfaces.acl.credit_facade as credit_facade_module
 from app.credit.domain.model.aggregates.purchase import PaymentMode
 from app.customers.interfaces.acl.customers_facade import CustomersFacade
 from app.main import app as application
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from tests.authorization import authorization
 from tests.credit.stored_credit import (
@@ -30,17 +29,6 @@ from tests.credit.stored_credit import (
 )
 from tests.stored_account import add_account
 from tests.stored_store import add_store
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
@@ -223,13 +211,20 @@ async def test_statement_of_the_month(client, customer, store_a, on):
     assert empty_month.status_code == 404
 
 
-async def test_dashboard_counts_overdue_installments_and_the_cap(client, admin_a, store_a, on):
+async def test_dashboard_counts_overdue_installments_statements_and_the_cap(
+    client, admin_a, store_a, on
+):
     on(date(2026, 12, 5))
 
     dashboard = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
 
     assert (dashboard["active_customers"], dashboard["outstanding_principal"]) == (1, "826.99")
-    assert (dashboard["overdue_installments"], dashboard["overdue_amount"]) == (1, "109.68")
+    # Installment 1 (109.68, due 3/12) and the November statement (426.99, due 26/11).
+    assert (
+        dashboard["overdue_installments"],
+        dashboard["overdue_statements"],
+        dashboard["overdue_amount"],
+    ) == (1, 1, "536.67")
     assert dashboard["purchases_this_month"]["count"] == 0
     assert dashboard["bcrp_cap"]["max_tea"] == "114.6800000"
 

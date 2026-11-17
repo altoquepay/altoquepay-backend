@@ -16,8 +16,7 @@ from app.regulation.infrastructure.persistence.bcrp_cap_repository_impl import (
     BcrpCapRepositoryImpl,
 )
 from app.shared.domain.value_objects import Rate
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from tests.authorization import authorization
 from tests.credit.stored_credit import LIMA, add_credit_setup
@@ -27,17 +26,6 @@ from tests.stored_account import add_account, add_customer
 NOW = datetime(2026, 11, 14, 10, tzinfo=LIMA)
 # After the last BCRP cap the migrations register.
 MAY_2027 = datetime(2027, 5, 10, 10, tzinfo=LIMA)
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
@@ -237,8 +225,8 @@ async def test_purchase_dated_in_a_cycle_already_cut_is_rejected(client, setup, 
     assert (response.status_code, response.json()["code"]) == (409, "CYCLE_CLOSED")
 
 
-async def test_only_store_administrators_register_purchases(client, setup):
-    customer = authorization(role="CUSTOMER", store_id=None, customer_id=1)
+async def test_only_store_administrators_register_purchases(client, setup, stored_customer_user):
+    customer = stored_customer_user
 
     assert (await client.post("/api/v1/purchases", json=report_test_3(setup))).status_code == 401
     response = await client.post("/api/v1/purchases", json=report_test_3(setup), headers=customer)
@@ -322,5 +310,46 @@ async def test_purchases_of_other_stores_are_not_found(client, unit_of_work, set
     history = await client.get("/api/v1/purchases", headers=other_admin)
     installments = await client.get("/api/v1/installments", headers=other_admin)
 
-    assert (detail.status_code, schedule.status_code) == (404, 404)
+    voided = await client.patch(f"/api/v1/purchases/{registered['id']}/void", headers=other_admin)
+
+    assert (detail.status_code, schedule.status_code, voided.status_code) == (404, 404, 404)
     assert (history.json()["total"], installments.json()["total"]) == (0, 0)
+
+
+async def test_a_purchase_voided_by_mistake_frees_the_credit_and_is_not_billed(
+    client, setup, admin
+):
+    # S/ 1000 of the S/ 1500 limit, so the same purchase fits again only once voided.
+    single_date = report_test_3(
+        setup,
+        mode="SINGLE_DATE",
+        installments_count=None,
+        items=[{"product_id": setup.product_id, "quantity": 10}],
+    )
+    mistaken = (await client.post("/api/v1/purchases", json=single_date, headers=admin)).json()
+
+    voided = await client.patch(f"/api/v1/purchases/{mistaken['id']}/void", headers=admin)
+    again = await client.post("/api/v1/purchases", json=single_date, headers=admin)
+    move_business_date_to(datetime(2026, 11, 15, 10, tzinfo=LIMA))
+    statement = await client.get(
+        f"/api/v1/customers/{setup.account_id}/cycles/2026/11", headers=admin
+    )
+
+    assert voided.status_code == 200
+    body = voided.json()
+    assert (body["status"], body["voided_by"], body["voided_at"]) == (
+        "VOIDED",
+        setup.user_id,
+        NOW.isoformat(),
+    )
+    assert again.status_code == 201
+    assert (statement.json()["status"], statement.json()["capital"]) == ("CLOSED", "1000.00")
+
+
+async def test_a_purchase_of_a_closed_cycle_cannot_be_voided(client, setup, admin):
+    registered = await register(client, setup, admin)
+    move_business_date_to(datetime(2026, 11, 15, 10, tzinfo=LIMA))
+
+    response = await client.patch(f"/api/v1/purchases/{registered['id']}/void", headers=admin)
+
+    assert (response.status_code, response.json()["code"]) == (409, "CYCLE_CLOSED")

@@ -10,10 +10,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app as application
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
-from tests.authorization import authorization
 
 PASSWORD = "mi-clave-segura"
 NEW_CUSTOMER = {
@@ -25,20 +23,14 @@ NEW_CUSTOMER = {
 }
 
 
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
 @pytest.fixture
-async def client():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
-        application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
-        transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-        application.dependency_overrides.clear()
+async def client(unit_of_work):
+    application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
+    application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    application.dependency_overrides.clear()
 
 
 async def store_admin(client, ruc: str, email: str) -> dict[str, str]:
@@ -313,7 +305,7 @@ async def test_a_store_that_opens_an_account_for_an_active_customer_cannot_take_
 
 
 async def test_support_chooses_the_only_store_that_may_restore_the_access(
-    client, admin, other_admin
+    client, admin, other_admin, stored_system_admin
 ):
     # A store activated the customer's DNI before them; the customer's own store is refused.
     first = (await open_account(client, admin)).json()
@@ -321,7 +313,7 @@ async def test_support_chooses_the_only_store_that_may_restore_the_access(
     own = (await open_account(client, other_admin)).json()
     refused = await redeem(client, own["access_code"]["code"])
     own_store_id = (await client.get("/api/v1/store/profile", headers=other_admin)).json()["id"]
-    support = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+    support = stored_system_admin
 
     def trust(store_id: int, headers: dict[str, str]):
         return client.post(
@@ -346,10 +338,12 @@ async def test_support_chooses_the_only_store_that_may_restore_the_access(
     assert (await sign_in(client)).status_code == 200
 
 
-async def test_a_deactivated_store_cannot_use_the_codes_it_issued_before(client, admin):
+async def test_a_deactivated_store_cannot_use_the_codes_it_issued_before(
+    client, admin, stored_system_admin
+):
     opened = (await open_account(client, admin)).json()
     store_id = (await client.get("/api/v1/store/profile", headers=admin)).json()["id"]
-    support = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+    support = stored_system_admin
 
     await client.patch(f"/api/v1/admin/stores/{store_id}/deactivate", headers=support)
     refused = await redeem(client, opened["access_code"]["code"])

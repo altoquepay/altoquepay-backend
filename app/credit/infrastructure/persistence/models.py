@@ -19,7 +19,7 @@ class PurchaseModel(Base):
     __tablename__ = "purchases"
     __table_args__ = (
         CheckConstraint("mode IN ('SINGLE_DATE', 'WEEKLY')", name="mode_known"),
-        CheckConstraint("status IN ('ACTIVE', 'PAID', 'PREPAID')", name="status_known"),
+        CheckConstraint("status IN ('ACTIVE', 'PAID', 'PREPAID', 'VOIDED')", name="status_known"),
         CheckConstraint(
             "(mode = 'SINGLE_DATE' AND term_days IS NOT NULL AND installments_count IS NULL)"
             " OR (mode = 'WEEKLY' AND grace_days IS NOT NULL AND installments_count >= 1"
@@ -52,6 +52,8 @@ class PurchaseModel(Base):
     status: Mapped[str] = mapped_column(String(7))
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"))
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    voided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
     items: Mapped[list["PurchaseItemModel"]] = relationship(
         lazy="selectin", order_by="PurchaseItemModel.id"
