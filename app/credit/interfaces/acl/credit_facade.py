@@ -8,7 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from app.credit.domain.model.aggregates.purchase import Purchase, outstanding_principal_of
-from app.credit.domain.repositories.purchase_repository import InstallmentEntry
+from app.credit.domain.repositories.purchase_repository import InstallmentEntry, PurchaseFilter
 from app.credit.infrastructure.persistence.purchase_repository_impl import PurchaseRepositoryImpl
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.unit_of_work import UnitOfWork
@@ -108,6 +108,26 @@ class CreditFacade:
     async def list_purchases(self, account_id: int) -> list[PurchaseSummary]:
         """Return the purchases of an account, most recent first."""
         return [to_purchase_summary(p) for p in await self._purchases.list_by_account(account_id)]
+
+    async def get_store_outstanding_principal(self, store_id: int) -> Decimal:
+        """Return what all the store's accounts owe, by the rule of get_outstanding_principal."""
+        active = await self._purchases.list_active_by_store(store_id)
+        return outstanding_principal_of(active).amount
+
+    async def list_store_installments_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[InstallmentSummary]:
+        """Return the store's pending and overdue installments due within the inclusive range."""
+        entries = await self._purchases.list_store_installments_due(store_id, from_date, to_date)
+        return [to_installment_summary(entry) for entry in entries]
+
+    async def list_store_purchases(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PurchaseSummary]:
+        """Return the store's purchases made between the two days in Lima, most recent first."""
+        purchase_filter = PurchaseFilter(from_date=from_date, to_date=to_date)
+        purchases = await self._purchases.list_by_store(store_id, purchase_filter)
+        return [to_purchase_summary(p) for p in purchases]
 
     async def _find(self, purchase_id: int) -> Purchase:
         purchase = await self._purchases.find_by_id(purchase_id)

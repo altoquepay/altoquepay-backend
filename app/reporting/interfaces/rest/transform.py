@@ -20,6 +20,7 @@ from app.reporting.interfaces.rest.resources.report_resources import (
     PurchaseResource,
     PurchaseScheduleResource,
     PurchaseTotalsResource,
+    UpcomingDueResource,
 )
 
 
@@ -99,6 +100,8 @@ def to_dashboard(dashboard: Dashboard) -> DashboardResource:
         purchases_this_month=PurchaseTotalsResource(**asdict(dashboard.purchases_this_month)),
         payments_this_month=PaymentTotalsResource(**asdict(dashboard.payments_this_month)),
         bcrp_cap=BcrpCapResource(**asdict(cap)) if cap else None,
+        upcoming=[UpcomingDueResource(**asdict(due)) for due in dashboard.upcoming],
+        next_cutoff=dashboard.next_cutoff,
     )
 
 

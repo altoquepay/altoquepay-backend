@@ -96,8 +96,22 @@ class BcrpCapResource(BaseModel):
     valid_to: date
 
 
+class UpcomingDueResource(BaseModel):
+    """type is INSTALLMENT for a weekly installment or CYCLE for a cycle statement."""
+
+    type: str
+    account_id: int
+    customer_name: str
+    due_date: date
+    amount: Decimal
+
+
 class DashboardResource(BaseModel):
-    """bcrp_cap is null when no cap is in force today: a system admin must register it."""
+    """bcrp_cap is null when no cap is in force today: a system admin must register it.
+
+    upcoming lists what falls due in the next 7 days, today included, by due date. next_cutoff
+    is the earliest cutoff among the cycles with purchases still open, or null if none is.
+    """
 
     active_customers: int
     outstanding_principal: Decimal
@@ -106,6 +120,8 @@ class DashboardResource(BaseModel):
     purchases_this_month: PurchaseTotalsResource
     payments_this_month: PaymentTotalsResource
     bcrp_cap: BcrpCapResource | None
+    upcoming: list[UpcomingDueResource]
+    next_cutoff: date | None
 
 
 class PeriodReportResource(BaseModel):

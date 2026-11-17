@@ -215,6 +215,35 @@ async def test_dashboard_counts_overdue_installments_and_the_cap(client, admin_a
     assert dashboard["bcrp_cap"]["max_tea"] == "114.6800000"
 
 
+async def test_dashboard_lists_what_falls_due_this_week_and_the_next_cutoff(
+    client, admin_a, store_a, unit_of_work, on
+):
+    # Bought after the November cutoff, so it opens the December cycle (cutoff 14/12).
+    await add_purchase(
+        unit_of_work, store_a, datetime(2026, 11, 20, 9, tzinfo=LIMA), PaymentMode.SINGLE_DATE, 1
+    )
+    on(date(2026, 11, 26))
+    payment_day = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
+    on(date(2026, 12, 3))
+    first_installment_day = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
+
+    # On 26/11 the November statement falls due; installment 1 (3/12) is still 7 days away.
+    assert payment_day["upcoming"] == [
+        {
+            "type": "CYCLE",
+            "account_id": store_a.account_id,
+            "customer_name": "Rosa Quispe Mamani",
+            "due_date": "2026-11-26",
+            "amount": "426.99",
+        }
+    ]
+    # On 3/12 the November statement is overdue, so it is no longer upcoming.
+    assert [
+        (due["type"], due["due_date"], due["amount"]) for due in first_installment_day["upcoming"]
+    ] == [("INSTALLMENT", "2026-12-03", "109.68")]
+    assert payment_day["next_cutoff"] == first_installment_day["next_cutoff"] == "2026-12-14"
+
+
 async def test_dashboard_month_counts_this_months_purchases(client, admin_a, store_a, on):
     on(date(2026, 10, 20))
 

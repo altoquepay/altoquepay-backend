@@ -4,9 +4,13 @@ from abc import ABC, abstractmethod
 from datetime import date
 from decimal import Decimal
 
-from app.billing.interfaces.acl.billing_facade import CycleStatement, PaymentSummary
+from app.billing.interfaces.acl.billing_facade import CycleDue, CycleStatement, PaymentSummary
 from app.credit.interfaces.acl.credit_facade import InstallmentSummary, PurchaseSummary
-from app.customers.interfaces.acl.customers_facade import AccountSummary, CreditTerms
+from app.customers.interfaces.acl.customers_facade import (
+    AccountHolder,
+    AccountSummary,
+    CreditTerms,
+)
 from app.regulation.interfaces.acl.regulation_facade import CurrentCap
 from app.stores.interfaces.acl.stores_facade import StoreSummary
 
@@ -20,7 +24,7 @@ class CustomerAccounts(ABC):
     async def accounts_of_person(self, customer_id: int) -> list[AccountSummary]: ...
 
     @abstractmethod
-    async def accounts_of_store(self, store_id: int) -> list[AccountSummary]: ...
+    async def holders_of_store(self, store_id: int) -> list[AccountHolder]: ...
 
     @abstractmethod
     async def terms(self, account_id: int) -> CreditTerms: ...
@@ -52,14 +56,40 @@ class CreditReader(ABC):
     @abstractmethod
     async def purchase(self, purchase_id: int) -> PurchaseSummary: ...
 
+    @abstractmethod
+    async def store_outstanding_principal(self, store_id: int) -> Decimal: ...
+
+    @abstractmethod
+    async def store_installments_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[InstallmentSummary]:
+        """Return the store's pending and overdue installments due within the inclusive range."""
+
+    @abstractmethod
+    async def store_purchases(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PurchaseSummary]:
+        """Return the store's purchases made between the two days, both included."""
+
 
 class BillingReader(ABC):
     @abstractmethod
     async def statement(self, account_id: int, year: int, month: int) -> CycleStatement | None: ...
 
     @abstractmethod
-    async def payments(self, account_id: int) -> list[PaymentSummary]:
-        """Return the payments of an account, most recent first."""
+    async def store_payments(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PaymentSummary]:
+        """Return the store's payments made between the two days, both included."""
+
+    @abstractmethod
+    async def store_cycles_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[CycleDue]:
+        """Return the store's closed, unpaid cycles payable within the inclusive range."""
+
+    @abstractmethod
+    async def next_cutoff(self, store_id: int) -> date | None: ...
 
 
 class RateCaps(ABC):

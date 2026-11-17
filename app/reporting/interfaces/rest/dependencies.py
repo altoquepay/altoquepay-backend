@@ -1,5 +1,4 @@
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 
@@ -18,7 +17,6 @@ from app.reporting.infrastructure.acl.external_readers import (
     ExternalRateCaps,
     ExternalStores,
 )
-from app.shared.infrastructure.config import get_settings
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from app.stores.interfaces.acl.stores_facade import StoresFacade
 
@@ -42,5 +40,4 @@ def get_store_report_service(
         ExternalCredit(CreditFacade(unit_of_work)),
         ExternalBilling(BillingFacade(unit_of_work)),
         ExternalRateCaps(RegulationFacade(unit_of_work)),
-        ZoneInfo(get_settings().app_timezone),
     )

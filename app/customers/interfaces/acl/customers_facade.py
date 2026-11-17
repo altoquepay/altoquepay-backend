@@ -38,6 +38,14 @@ class AccountSummary:
     status: str
 
 
+@dataclass(frozen=True)
+class AccountHolder:
+    account_id: int
+    status: str
+    dni: str
+    full_name: str
+
+
 def account_not_found() -> BusinessError:
     return BusinessError("NOT_FOUND", "The customer account does not exist.", status=404)
 
@@ -88,11 +96,16 @@ class CustomersFacade:
             if account.id is not None
         ]
 
-    async def list_accounts_of_store(self, store_id: int) -> list[AccountSummary]:
-        """Return the active and inactive accounts of a store, for its reports."""
+    async def list_account_holders(self, store_id: int) -> list[AccountHolder]:
+        """Return the active and inactive accounts of a store with who holds them, oldest first."""
         return [
-            AccountSummary(account.id, account.store_id, account.status.value)
-            for account in await self._accounts.list_by_store(store_id)
+            AccountHolder(
+                account.id,
+                account.status.value,
+                person.dni.value,
+                f"{person.first_names} {person.last_names}",
+            )
+            for account, person in await self._accounts.list_by_store(store_id)
             if account.id is not None
         ]
 

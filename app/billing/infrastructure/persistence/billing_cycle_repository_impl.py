@@ -63,6 +63,29 @@ class BillingCycleRepositoryImpl(BillingCycleRepository):
         models = await self._session.scalars(query.order_by(BillingCycleModel.id))
         return [to_domain(model) for model in models]
 
+    async def list_closed_by_payment_date(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[BillingCycle]:
+        models = await self._session.scalars(
+            select(BillingCycleModel)
+            .where(
+                BillingCycleModel.store_id == store_id,
+                BillingCycleModel.status == CycleStatus.CLOSED.value,
+                BillingCycleModel.payment_date.between(from_date, to_date),
+            )
+            .order_by(BillingCycleModel.payment_date, BillingCycleModel.id)
+        )
+        return [to_domain(model) for model in models]
+
+    async def find_next_cutoff(self, store_id: int, today: date) -> date | None:
+        return await self._session.scalar(
+            select(func.min(BillingCycleModel.cutoff_date)).where(
+                BillingCycleModel.store_id == store_id,
+                BillingCycleModel.status == CycleStatus.OPEN.value,
+                BillingCycleModel.cutoff_date >= today,
+            )
+        )
+
     async def list_page(
         self, store_id: int, cycle_filter: CycleFilter, today: date, offset: int, size: int
     ) -> tuple[list[BillingCycle], int]:
