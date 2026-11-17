@@ -205,6 +205,18 @@ async def test_forgotten_password_is_reset_through_the_emailed_link(
     assert (await login(client, ADMIN_EMAIL, ADMIN_PASSWORD)).status_code == 401
 
 
+async def test_an_ip_that_used_all_its_attempts_gets_no_more_reset_emails(
+    client, notifier, store_admin_id
+):
+    for _ in range(MAXIMUM_ATTEMPTS):
+        await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+
+    refused = await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+
+    assert (refused.status_code, refused.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
+    assert len(notifier.sent) == MAXIMUM_ATTEMPTS
+
+
 async def test_forgot_password_answers_the_same_for_unknown_emails(client, notifier):
     response = await client.post(
         "/api/v1/auth/forgot-password", json={"email": "nadie@bodega-test.pe"}

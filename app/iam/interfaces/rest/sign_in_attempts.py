@@ -1,4 +1,6 @@
-"""Caps the sign-in attempts of each IP, so a script cannot guess passwords or tie up Argon2."""
+"""Caps the sign-in and reset requests of each IP, so a script cannot guess passwords,
+tie up Argon2 or flood an inbox with reset emails.
+"""
 
 import time
 from collections.abc import Callable
@@ -16,7 +18,7 @@ TRACKED_IPS_BEFORE_SWEEP = 10_000
 def too_many_attempts() -> BusinessError:
     return BusinessError(
         "TOO_MANY_ATTEMPTS",
-        "Too many sign-in attempts from this connection. Try again in 15 minutes.",
+        "Too many attempts from this connection. Try again in 15 minutes.",
         status=429,
     )
 
