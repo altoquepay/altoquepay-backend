@@ -1,6 +1,7 @@
 """Tests for BillingFacade.get_or_open_cycle against the migrated PostgreSQL database.
 
-Nothing is committed. The cases come from the guide for credit and the report's tests.
+Nothing is committed: commit only flushes and counts. The cases come from the guide for credit
+and the report's tests.
 """
 
 from datetime import UTC, date, datetime
@@ -28,9 +29,17 @@ from tests.stored_store import add_store
 LIMA = ZoneInfo("America/Lima")
 
 
+class CountingUnitOfWork(UnitOfWork):
+    commits = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+        await self.session.flush()
+
+
 @pytest.fixture
 async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
+    async with CountingUnitOfWork(session_factory) as unit_of_work:
         yield unit_of_work
 
 
@@ -174,3 +183,22 @@ async def test_store_wide_reads_cover_payments_cycles_due_and_next_cutoff(
     assert await facade.get_next_cutoff(other_store.store_id) is None
     assert [p.payment_id for p in december] == [payment_id]
     assert november == []
+
+
+async def test_a_read_saves_the_cycles_it_closes_once(unit_of_work, monkeypatch):
+    setup = await add_credit_setup(unit_of_work)
+    # Report test N°3 on a single date, in the November cycle (cutoff 14/11).
+    await add_purchase(unit_of_work, setup, mode=PaymentMode.SINGLE_DATE)
+    monkeypatch.setattr(billing_facade_module, "get_business_today", lambda: date(2026, 11, 20))
+    monkeypatch.setattr(
+        billing_facade_module, "get_business_now", lambda: datetime(2026, 11, 20, 12, tzinfo=LIMA)
+    )
+    facade = BillingFacade(unit_of_work)
+
+    first = await facade.get_cycle_statement(setup.account_id, 2026, 11)
+    commits_of_the_first_read = unit_of_work.commits
+    second = await facade.get_cycle_statement(setup.account_id, 2026, 11)
+
+    assert first is not None and second is not None
+    assert (first.status, first.total) == ("CLOSED", Decimal("426.99"))
+    assert (commits_of_the_first_read, unit_of_work.commits) == (1, 1)

@@ -54,4 +54,5 @@ def get_billing_query_service(
         BillingCycleRepositoryImpl(unit_of_work.session),
         PaymentRepositoryImpl(unit_of_work.session),
         ExternalCredit(CreditFacade(unit_of_work)),
+        unit_of_work,
     )

@@ -34,12 +34,14 @@ class CycleClosingService:
         *,
         store_id: int | None = None,
         account_id: int | None = None,
-    ) -> None:
+    ) -> bool:
+        """Close the due cycles of the store or account. Return whether any was closed."""
         due = await self._cycles.list_due_for_closing(
             today, store_id=store_id, account_id=account_id
         )
         for cycle in due:
             await self.close(cycle, now)
+        return bool(due)
 
     async def close(self, cycle: BillingCycle, now: datetime) -> None:
         if cycle.id is None:

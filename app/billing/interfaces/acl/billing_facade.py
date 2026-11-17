@@ -68,7 +68,10 @@ class PaymentSummary:
 
 
 class BillingFacade:
-    """Never commits: the use case of the calling context does, once all its work succeeded."""
+    """Never commits, except the closing of due cycles its reads do, which is final.
+
+    The use case of the calling context commits its own work, once all of it succeeded.
+    """
 
     def __init__(self, unit_of_work: UnitOfWork) -> None:
         cycles = BillingCycleRepositoryImpl(unit_of_work.session)
@@ -80,6 +83,7 @@ class BillingFacade:
             cycles,
             PaymentRepositoryImpl(unit_of_work.session),
             ExternalCredit(CreditFacade(unit_of_work)),
+            unit_of_work,
         )
 
     async def get_or_open_cycle(
