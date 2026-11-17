@@ -49,7 +49,7 @@ class PurchaseRegistrationService:
             )
         product_ids = [item.product_id for item in command.items]
         prices = await self._prices.list_prices(command.store_id, product_ids)
-        cycle = await self._cycles.cycle_of(command.account_id, command.purchased_at)
+        cycle = await self._cycles.cycle_of(command.account_id, command.purchased_at, now.date())
         purchase = Purchase.register(
             store_id=command.store_id,
             account_id=command.account_id,

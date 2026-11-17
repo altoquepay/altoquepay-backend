@@ -64,7 +64,10 @@ async def add_purchase(
     quantity: int = 4,
 ) -> Purchase:
     """Flush a purchase of the setup's product, by default report test N°3 (S/ 400, 4 weeks)."""
-    cycle = await BillingFacade(unit_of_work).get_or_open_cycle(setup.account_id, purchased_at)
+    # Registered on the day of the purchase, so its cycle still takes it.
+    cycle = await BillingFacade(unit_of_work).get_or_open_cycle(
+        setup.account_id, purchased_at, purchased_at.astimezone(LIMA).date()
+    )
     purchase = Purchase.register(
         store_id=setup.store_id,
         account_id=setup.account_id,

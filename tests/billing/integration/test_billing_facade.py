@@ -66,7 +66,9 @@ async def test_purchase_gets_the_cycle_of_its_day_in_lima(
 ):
     account_id = await new_account(unit_of_work, cutoff_day, payment_day)
 
-    cycle = await BillingFacade(unit_of_work).get_or_open_cycle(account_id, purchased_at)
+    cycle = await BillingFacade(unit_of_work).get_or_open_cycle(
+        account_id, purchased_at, purchased_at.astimezone(LIMA).date()
+    )
 
     assert cycle == CycleReference(
         cycle.cycle_id, year, month, date(year, month, cutoff_day), payment_date
@@ -77,8 +79,9 @@ async def test_same_cycle_is_returned_twice(unit_of_work):
     account_id = await new_account(unit_of_work, 20, 26)
     facade = BillingFacade(unit_of_work)
 
-    first = await facade.get_or_open_cycle(account_id, datetime(2026, 9, 1, tzinfo=LIMA))
-    second = await facade.get_or_open_cycle(account_id, datetime(2026, 9, 20, tzinfo=LIMA))
+    today = date(2026, 9, 20)
+    first = await facade.get_or_open_cycle(account_id, datetime(2026, 9, 1, tzinfo=LIMA), today)
+    second = await facade.get_or_open_cycle(account_id, datetime(2026, 9, 20, tzinfo=LIMA), today)
 
     assert first == second
 
@@ -93,16 +96,34 @@ async def test_purchase_in_a_closed_cycle_is_rejected(unit_of_work):
 
     with pytest.raises(BusinessError) as error:
         await BillingFacade(unit_of_work).get_or_open_cycle(
-            account_id, datetime(2026, 9, 15, 10, tzinfo=LIMA)
+            account_id, datetime(2026, 9, 15, 10, tzinfo=LIMA), date(2026, 9, 15)
         )
 
+    assert (error.value.code, error.value.status) == ("CYCLE_CLOSED", 409)
+
+
+async def test_purchase_dated_before_a_cutoff_that_ended_is_rejected(unit_of_work):
+    account_id = await new_account(unit_of_work, 20, 26)
+    facade = BillingFacade(unit_of_work)
+
+    # On the cutoff day the cycle still takes purchases; from the next day on it is closed,
+    # even though no cycle was stored for it yet.
+    on_the_cutoff = await facade.get_or_open_cycle(
+        account_id, datetime(2026, 9, 15, 10, tzinfo=LIMA), date(2026, 9, 20)
+    )
+    with pytest.raises(BusinessError) as error:
+        await facade.get_or_open_cycle(
+            account_id, datetime(2026, 8, 10, 10, tzinfo=LIMA), date(2026, 9, 20)
+        )
+
+    assert (on_the_cutoff.year, on_the_cutoff.month) == (2026, 9)
     assert (error.value.code, error.value.status) == ("CYCLE_CLOSED", 409)
 
 
 async def test_unknown_account_is_not_found(unit_of_work):
     with pytest.raises(BusinessError) as error:
         await BillingFacade(unit_of_work).get_or_open_cycle(
-            999_999, datetime(2026, 9, 15, tzinfo=LIMA)
+            999_999, datetime(2026, 9, 15, tzinfo=LIMA), date(2026, 9, 15)
         )
 
     assert (error.value.code, error.value.status) == ("NOT_FOUND", 404)
@@ -112,7 +133,9 @@ async def test_purchase_time_without_time_zone_is_refused(unit_of_work):
     account_id = await new_account(unit_of_work, 20, 26)
 
     with pytest.raises(ValueError):
-        await BillingFacade(unit_of_work).get_or_open_cycle(account_id, datetime(2026, 9, 15))
+        await BillingFacade(unit_of_work).get_or_open_cycle(
+            account_id, datetime(2026, 9, 15), date(2026, 9, 15)
+        )
 
 
 async def test_store_wide_reads_cover_payments_cycles_due_and_next_cutoff(

@@ -17,7 +17,8 @@ from tests.authorization import authorization
 from tests.credit.stored_credit import LIMA, add_credit_setup
 from tests.stored_account import add_account, add_customer
 
-NOW = datetime(2026, 11, 16, 10, tzinfo=LIMA)
+# The cutoff day, so the November cycle still takes the purchase of 15/10.
+NOW = datetime(2026, 11, 14, 10, tzinfo=LIMA)
 
 
 class RollbackUnitOfWork(UnitOfWork):
@@ -133,7 +134,7 @@ async def test_purchase_beyond_the_available_credit_is_rejected(client, setup, a
     ("overrides", "status", "code", "field"),
     [
         ({"installments_count": 5}, 422, "MAX_WEEKS_EXCEEDED", "installments_count"),
-        ({"purchased_at": "2026-11-16T10:00:01-05:00"}, 422, "PURCHASE_IN_FUTURE", "purchased_at"),
+        ({"purchased_at": "2026-11-14T10:00:01-05:00"}, 422, "PURCHASE_IN_FUTURE", "purchased_at"),
         ({"purchased_at": "2026-10-15T12:00:00"}, 422, "VALIDATION_ERROR", "purchased_at"),
         ({"customer_id": 999999}, 404, "NOT_FOUND", None),
         ({"items": [{"product_id": 999999, "quantity": 1}]}, 422, "PRODUCT_NOT_AVAILABLE", "items"),
@@ -177,6 +178,17 @@ async def test_inactive_customer_cannot_buy(client, unit_of_work, setup, admin):
     )
 
     assert (response.status_code, response.json()["code"]) == (409, "ACCOUNT_INACTIVE")
+
+
+async def test_purchase_dated_in_a_cycle_already_cut_is_rejected(client, setup, admin):
+    # The October cycle was cut on 14/10, so it would be overdue since 27/10.
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, purchased_at="2026-10-10T12:00:00-05:00"),
+        headers=admin,
+    )
+
+    assert (response.status_code, response.json()["code"]) == (409, "CYCLE_CLOSED")
 
 
 async def test_only_store_administrators_register_purchases(client, setup):
