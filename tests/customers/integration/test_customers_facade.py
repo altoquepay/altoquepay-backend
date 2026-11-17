@@ -50,7 +50,7 @@ async def test_credit_terms_have_rates_in_percent(facade, unit_of_work):
     )
 
 
-@pytest.mark.parametrize("method", ["get_credit_terms", "lock_account"])
+@pytest.mark.parametrize("method", ["get_credit_terms", "lock_account", "get_account_holder"])
 async def test_unknown_account_is_not_found(facade, method):
     with pytest.raises(BusinessError) as error:
         await getattr(facade, method)(999_999)
@@ -126,4 +126,5 @@ async def test_holders_of_a_store_include_inactive_accounts_only_of_it(facade, u
         AccountHolder(first.id, "ACTIVE", "70000001", "Rosa Quispe Mamani"),
         AccountHolder(second.id, "INACTIVE", "70000002", "Rosa Quispe Mamani"),
     ]
+    assert await facade.get_account_holder(first.id) == holders[0]
     assert await facade.list_account_holders(999_999) == []
