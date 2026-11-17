@@ -11,8 +11,7 @@ from app.catalog.infrastructure.persistence.models import ProductImageModel
 from app.catalog.interfaces.acl.catalog_facade import CatalogFacade
 from app.main import app as application
 from app.shared.domain.errors import BusinessError
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 
 PASSWORD = "mi-clave-segura"
 RICE = {
@@ -25,17 +24,6 @@ RICE = {
     "list_price": "23.9",
 }
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture

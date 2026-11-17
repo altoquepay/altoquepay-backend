@@ -3,8 +3,6 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-import pytest
-
 from app.credit.domain.model.aggregates.purchase import (
     InstallmentStatus,
     PaymentMode,
@@ -13,8 +11,6 @@ from app.credit.domain.model.aggregates.purchase import (
 from app.credit.domain.repositories.purchase_repository import PurchaseFilter
 from app.credit.infrastructure.persistence.purchase_repository_impl import PurchaseRepositoryImpl
 from app.shared.domain.value_objects import Money
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork
 from tests.credit.stored_credit import (
     DUE_DATES_OF_TEST_3,
     LIMA,
@@ -22,12 +18,6 @@ from tests.credit.stored_credit import (
     add_payment,
     add_purchase,
 )
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 async def test_stored_purchase_reads_back_equal(unit_of_work):

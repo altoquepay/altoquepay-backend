@@ -9,8 +9,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app as application
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_today
 from tests.authorization import authorization
 
@@ -23,20 +22,14 @@ REGISTRATION = {
 }
 
 
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
 @pytest.fixture
-async def client():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
-        application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
-        transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-        application.dependency_overrides.clear()
+async def client(unit_of_work):
+    application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
+    application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 12)
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    application.dependency_overrides.clear()
 
 
 async def register(client, **overrides):

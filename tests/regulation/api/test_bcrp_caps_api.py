@@ -8,29 +8,14 @@ from datetime import date
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.iam.domain.model.aggregates.user import User
-from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl
 from app.main import app as application
-from app.shared.domain.value_objects import Role
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_today
 from tests.authorization import authorization
 
 SYSTEM_ADMIN = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
 CUSTOMER = authorization(sub="9", role="CUSTOMER", store_id=None, customer_id=4)
 NEXT_CAP = {"max_tea": "110.5", "valid_from": "2027-05-01", "valid_to": "2027-10-31"}
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
@@ -41,14 +26,6 @@ async def client(unit_of_work):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
     application.dependency_overrides.clear()
-
-
-@pytest.fixture
-async def stored_system_admin(unit_of_work) -> dict[str, str]:
-    """Headers of a system admin that exists, since bcrp_caps.created_by references users."""
-    admin = User("admin@bcrp-test.pe", "unused-hash", Role.SYSTEM_ADMIN)
-    await UserRepositoryImpl(unit_of_work.session).add(admin)
-    return authorization(sub=str(admin.id), role="SYSTEM_ADMIN", store_id=None)
 
 
 async def test_any_signed_in_user_gets_the_cap_in_force(client):

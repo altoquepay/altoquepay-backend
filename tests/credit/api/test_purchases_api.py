@@ -16,8 +16,7 @@ from app.regulation.infrastructure.persistence.bcrp_cap_repository_impl import (
     BcrpCapRepositoryImpl,
 )
 from app.shared.domain.value_objects import Rate
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from tests.authorization import authorization
 from tests.credit.stored_credit import LIMA, add_credit_setup
@@ -27,17 +26,6 @@ from tests.stored_account import add_account, add_customer
 NOW = datetime(2026, 11, 14, 10, tzinfo=LIMA)
 # After the last BCRP cap the migrations register.
 MAY_2027 = datetime(2027, 5, 10, 10, tzinfo=LIMA)
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture

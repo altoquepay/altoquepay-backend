@@ -20,8 +20,7 @@ from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
 from app.iam.interfaces.rest.sign_in_attempts import MAXIMUM_ATTEMPTS
 from app.main import app as application
 from app.shared.domain.value_objects import Dni
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from tests.iam.fakes import RecordingNotifier
 from tests.stored_store import add_store
 
@@ -31,17 +30,6 @@ SYSTEM_ADMIN_EMAIL = "admin@altoquepay-test.pe"
 FIRST_PASSWORD = "clave-inicial"
 CUSTOMER_DNI = "70000001"
 CUSTOMER_PASSWORD = "clave-de-cliente"
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
