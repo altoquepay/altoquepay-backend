@@ -96,7 +96,6 @@ Settings are read from environment variables, or from a `.env` file in the direc
 | `SMTP_USER` | SMTP user, also the sender of the emails | |
 | `SMTP_PASSWORD` | SMTP password | |
 | `FRONTEND_URL` | Base URL of the frontend, used to build the password reset links | `http://localhost:4200` |
-| `MEDIA_DIR` | Folder for uploaded files such as product images, served under `/media` | `media` |
 
 ## Workflow
 
