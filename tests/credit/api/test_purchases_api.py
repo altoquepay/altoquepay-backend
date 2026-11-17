@@ -4,12 +4,18 @@ Every test shares one Unit of Work that never commits, so what it creates disapp
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.customers.domain.model.aggregates.store_customer import AccountStatus
 from app.main import app as application
+from app.regulation.domain.model.aggregates.bcrp_cap import BcrpCap
+from app.regulation.infrastructure.persistence.bcrp_cap_repository_impl import (
+    BcrpCapRepositoryImpl,
+)
+from app.shared.domain.value_objects import Rate
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
@@ -19,6 +25,8 @@ from tests.stored_account import add_account, add_customer
 
 # The cutoff day, so the November cycle still takes the purchase of 15/10.
 NOW = datetime(2026, 11, 14, 10, tzinfo=LIMA)
+# After the last BCRP cap the migrations register.
+MAY_2027 = datetime(2027, 5, 10, 10, tzinfo=LIMA)
 
 
 class RollbackUnitOfWork(UnitOfWork):
@@ -128,6 +136,44 @@ async def test_purchase_beyond_the_available_credit_is_rejected(client, setup, a
     assert first.status_code == 201
     assert (second.status_code, second.json()["code"]) == (422, "CREDIT_LIMIT_EXCEEDED")
     assert second.json()["details"] == {"available": "500.00"}
+
+
+def move_business_date_to(moment: datetime) -> None:
+    application.dependency_overrides[get_business_now] = lambda: moment
+    application.dependency_overrides[get_business_today] = lambda: moment.date()
+
+
+async def test_a_purchase_is_refused_when_the_account_rates_exceed_the_cap_of_its_day(
+    client, unit_of_work, setup, admin
+):
+    # The account was opened at 75%, before the BCRP lowered the cap to 50%.
+    lower_cap = BcrpCap(Rate.from_percent(Decimal("50")), date(2027, 5, 1), date(2027, 10, 31))
+    await BcrpCapRepositoryImpl(unit_of_work.session).add(lower_cap)
+    move_business_date_to(MAY_2027)
+
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, purchased_at=MAY_2027.isoformat()),
+        headers=admin,
+    )
+    listed = await client.get("/api/v1/purchases", headers=admin)
+
+    body = response.json()
+    assert (response.status_code, body["code"], body["field"]) == (422, "RATE_ABOVE_BCRP_CAP", None)
+    assert listed.json()["total"] == 0
+
+
+async def test_a_purchase_is_refused_on_a_day_without_a_bcrp_cap(client, setup, admin):
+    # The caps of the migration end on 30/04/2027.
+    move_business_date_to(MAY_2027)
+
+    response = await client.post(
+        "/api/v1/purchases/simulate",
+        json=report_test_3(setup, purchased_at=MAY_2027.isoformat()),
+        headers=admin,
+    )
+
+    assert (response.status_code, response.json()["code"]) == (409, "NO_BCRP_CAP_IN_FORCE")
 
 
 @pytest.mark.parametrize(

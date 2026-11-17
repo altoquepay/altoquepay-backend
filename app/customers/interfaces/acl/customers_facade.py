@@ -191,5 +191,5 @@ def to_account_holder(account: StoreCustomer, person: Customer) -> AccountHolder
         account.id,
         account.status.value,
         person.dni.value,
-        f"{person.first_names} {person.last_names}",
+        f"{account.first_names} {account.last_names}",
     )

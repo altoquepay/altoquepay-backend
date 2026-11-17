@@ -35,10 +35,3 @@ class CustomerRepositoryImpl(CustomerRepository):
         self._session.add(model)
         await self._session.flush()
         customer.id = model.id
-
-    async def update(self, customer: Customer) -> None:
-        if customer.id is None:
-            raise ValueError("Only a stored customer can be updated.")
-        model = await self._session.get_one(CustomerModel, customer.id)
-        copy_customer_to_model(customer, model)
-        await self._session.flush()

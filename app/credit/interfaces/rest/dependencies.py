@@ -11,8 +11,10 @@ from app.credit.application.query_services.purchase_query_service import Purchas
 from app.credit.infrastructure.acl.external_billing import ExternalBilling
 from app.credit.infrastructure.acl.external_catalog import ExternalCatalog
 from app.credit.infrastructure.acl.external_customers import ExternalCustomers
+from app.credit.infrastructure.acl.external_rate_caps import ExternalRateCaps
 from app.credit.infrastructure.persistence.purchase_repository_impl import PurchaseRepositoryImpl
 from app.customers.interfaces.acl.customers_facade import CustomersFacade
+from app.regulation.interfaces.acl.regulation_facade import RegulationFacade
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 
 
@@ -24,6 +26,7 @@ def get_purchase_registration_service(
         ExternalCustomers(CustomersFacade(unit_of_work)),
         ExternalCatalog(CatalogFacade(unit_of_work)),
         ExternalBilling(BillingFacade(unit_of_work)),
+        ExternalRateCaps(RegulationFacade(unit_of_work)),
         unit_of_work,
     )
 

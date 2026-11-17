@@ -27,7 +27,7 @@ def filtered(query: Select, store_id: int, account_filter: AccountFilter) -> Sel
     search = (account_filter.search or "").strip()
     if search:
         pattern = f"%{escape_like(search)}%"
-        full_name = CustomerModel.first_names + " " + CustomerModel.last_names
+        full_name = StoreCustomerModel.first_names + " " + StoreCustomerModel.last_names
         query = query.where(
             or_(
                 CustomerModel.dni.ilike(pattern, escape="\\"),

@@ -17,7 +17,3 @@ class CustomerRepository(ABC):
     @abstractmethod
     async def add(self, customer: Customer) -> None:
         """Store a new customer and set its id."""
-
-    @abstractmethod
-    async def update(self, customer: Customer) -> None:
-        """Store the changes of a customer that already has an id."""

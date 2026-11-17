@@ -9,8 +9,10 @@ import subprocess
 import sys
 
 import asyncpg
+import pytest
 from sqlalchemy import make_url
 
+from app.iam.interfaces.rest.sign_in_attempts import sign_in_attempts
 from app.shared.infrastructure.config import Settings
 
 development_database_url = make_url(Settings().database_url)
@@ -37,3 +39,9 @@ async def create_test_database_if_missing() -> None:
 def pytest_sessionstart(session) -> None:
     asyncio.run(create_test_database_if_missing())
     subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
+
+
+@pytest.fixture(autouse=True)
+def forget_sign_in_attempts() -> None:
+    """Every test signs in from the same IP, so each one starts with no attempts counted."""
+    sign_in_attempts.clear()

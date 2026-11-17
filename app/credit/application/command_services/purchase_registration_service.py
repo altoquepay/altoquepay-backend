@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.credit.application.ports.credit_accounts import CreditAccounts
 from app.credit.application.ports.cycle_assigner import CycleAssigner
 from app.credit.application.ports.product_prices import ProductPrices
+from app.credit.application.ports.rate_cap_checker import RateCapChecker
 from app.credit.domain.model.aggregates.purchase import (
     Purchase,
     PurchaseItem,
@@ -22,12 +23,14 @@ class PurchaseRegistrationService:
         accounts: CreditAccounts,
         prices: ProductPrices,
         cycles: CycleAssigner,
+        caps: RateCapChecker,
         unit_of_work: UnitOfWork,
     ) -> None:
         self._purchases = purchases
         self._accounts = accounts
         self._prices = prices
         self._cycles = cycles
+        self._caps = caps
         self._unit_of_work = unit_of_work
 
     async def simulate(self, command: RegisterPurchaseCommand, now: datetime) -> Purchase:
@@ -47,6 +50,9 @@ class PurchaseRegistrationService:
             raise BusinessError(
                 "PURCHASE_IN_FUTURE", "A purchase cannot be in the future.", field="purchased_at"
             )
+        purchase_day = command.purchased_at.astimezone(now.tzinfo).date()
+        # The account keeps its rates when the BCRP lowers the cap, so check them on each sale.
+        await self._caps.check(terms.tea, terms.late_tea, purchase_day)
         product_ids = [item.product_id for item in command.items]
         prices = await self._prices.list_prices(command.store_id, product_ids)
         cycle = await self._cycles.cycle_of(command.account_id, command.purchased_at, now.date())
@@ -56,7 +62,7 @@ class PurchaseRegistrationService:
             cycle_id=cycle.cycle_id,
             cycle_payment_date=cycle.payment_date,
             purchased_at=command.purchased_at,
-            purchase_day=command.purchased_at.astimezone(now.tzinfo).date(),
+            purchase_day=purchase_day,
             mode=command.mode,
             items=[
                 PurchaseItem(item.product_id, item.quantity, prices[item.product_id])

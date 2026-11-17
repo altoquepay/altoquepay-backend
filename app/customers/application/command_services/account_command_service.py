@@ -82,22 +82,30 @@ class AccountCommandService:
                 field="dni",
                 status=409,
             )
-        account = StoreCustomer(command.store_id, customer.id, command.credit_limit, conditions)
+        account = StoreCustomer(
+            store_id=command.store_id,
+            customer_id=customer.id,
+            first_names=command.first_names,
+            last_names=command.last_names,
+            credit_limit=command.credit_limit,
+            conditions=conditions,
+            phone=command.phone,
+            address=command.address,
+        )
         access_code = issue_code(account, now)
         await self._accounts.add(account)
         await self._unit_of_work.commit()
         return OpenedAccount(CustomerAccount(account, customer), access_code)
 
     async def update(self, command: UpdateAccountCommand, today: date) -> CustomerAccount:
-        """Replace the person's data and the account terms. The DNI never changes."""
+        """Replace the store's data of the person and the account terms. The DNI never changes."""
         found = await self._query.get(command.store_id, command.account_id)
         conditions = command.conditions
         await self._rate_caps.check(conditions.tea, conditions.late_tea, today)
-        found.customer.update_contact(
+        found.account.update_contact(
             command.first_names, command.last_names, command.phone, command.address
         )
         found.account.update_terms(command.credit_limit, conditions)
-        await self._customers.update(found.customer)
         await self._accounts.update(found.account)
         await self._unit_of_work.commit()
         return found
@@ -179,13 +187,6 @@ class AccountCommandService:
         user_id = await self._users.find_user_id(command.dni.value)
         if user_id is None:
             user_id = await self._users.create(command.dni.value)
-        customer = Customer(
-            command.dni,
-            command.first_names or "",
-            command.last_names or "",
-            user_id,
-            command.phone,
-            command.address,
-        )
+        customer = Customer(command.dni, user_id)
         await self._customers.add(customer)
         return customer
