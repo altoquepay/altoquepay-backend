@@ -32,7 +32,7 @@ def test_access_codes_are_random_and_easy_to_dictate():
 
     assert len(codes) == 50
     for code in codes:
-        assert len(code) == ACCESS_CODE_LENGTH == 10
+        assert len(code) == ACCESS_CODE_LENGTH == 12
         assert set(code) <= set(ACCESS_CODE_ALPHABET)
         assert not set(code) & set("0O1I") and code == code.upper()
 

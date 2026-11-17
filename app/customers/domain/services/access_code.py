@@ -9,7 +9,7 @@ from app.shared.domain.errors import BusinessError
 
 # Capital letters and digits that cannot be mistaken for each other when read aloud.
 ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-ACCESS_CODE_LENGTH = 10
+ACCESS_CODE_LENGTH = 12
 
 
 def generate_access_code() -> str:
@@ -20,7 +20,8 @@ def generate_access_code() -> str:
 def hash_access_code(code: str) -> str:
     """Return what is kept of a code. It is typed by hand, so case, spaces and hyphens pass."""
     typed = code.replace(" ", "").replace("-", "").upper()
-    # The code is random and short-lived, so a fast hash is enough: there is nothing to brute force.
+    # A fast hash is enough: 60 random bits take a GPU years to try, even from a copy of the
+    # database, and the code lives 48 hours.
     return hashlib.sha256(typed.encode()).hexdigest()
 
 

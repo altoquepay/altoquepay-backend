@@ -111,7 +111,7 @@ async def test_new_dni_gets_an_account_with_the_store_defaults_and_an_access_cod
     }
     access_code = body["access_code"]
     expires_in = datetime.fromisoformat(access_code["expires_at"]) - datetime.now(UTC)
-    assert len(access_code["code"]) == 10
+    assert len(access_code["code"]) == 12
     assert timedelta(hours=47) < expires_in <= timedelta(hours=48)
 
 

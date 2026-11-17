@@ -79,7 +79,7 @@ class OpenedAccountResource(BaseModel):
 
 
 class LinkStoreResource(BaseModel):
-    code: str = Field(max_length=20, examples=["K7QHM2XWPB"])
+    code: str = Field(max_length=20, examples=["K7QH-M2XW-PB9D"])
 
 
 class TrustStoreResource(BaseModel):
