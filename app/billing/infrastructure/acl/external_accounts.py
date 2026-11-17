@@ -1,4 +1,8 @@
-from app.billing.application.ports.account_directory import AccountDirectory, AccountInfo
+from app.billing.application.ports.account_directory import (
+    AccountDirectory,
+    AccountHolderInfo,
+    AccountInfo,
+)
 from app.customers.interfaces.acl.customers_facade import CustomersFacade
 
 
@@ -12,3 +16,7 @@ class ExternalAccounts(AccountDirectory):
 
     async def lock(self, account_id: int) -> None:
         await self._customers_facade.lock_account(account_id)
+
+    async def get_holder(self, account_id: int) -> AccountHolderInfo:
+        holder = await self._customers_facade.get_account_holder(account_id)
+        return AccountHolderInfo(holder.dni, holder.full_name)

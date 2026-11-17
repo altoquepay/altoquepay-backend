@@ -9,6 +9,12 @@ class AccountInfo:
     payment_day: int
 
 
+@dataclass(frozen=True)
+class AccountHolderInfo:
+    dni: str
+    full_name: str
+
+
 class AccountDirectory(ABC):
     """What billing needs to know about accounts, answered by the customers context."""
 
@@ -19,3 +25,7 @@ class AccountDirectory(ABC):
     @abstractmethod
     async def lock(self, account_id: int) -> None:
         """Lock the account until the transaction ends, so two payments cannot cross."""
+
+    @abstractmethod
+    async def get_holder(self, account_id: int) -> AccountHolderInfo:
+        """Return who holds the account, for its statement. Raise NOT_FOUND (404) if missing."""
