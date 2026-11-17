@@ -4,20 +4,24 @@ Nothing is committed. The cases come from the guide for credit and the report's 
 """
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 import pytest
 
+import app.billing.interfaces.acl.billing_facade as billing_facade_module
 from app.billing.domain.model.aggregates.billing_cycle import BillingCycle, CycleStatus
 from app.billing.domain.services.cycle_assignment import cycle_period_of
 from app.billing.infrastructure.persistence.billing_cycle_repository_impl import (
     BillingCycleRepositoryImpl,
 )
 from app.billing.interfaces.acl.billing_facade import BillingFacade, CycleReference
+from app.credit.domain.model.aggregates.purchase import PaymentMode
 from app.customers.interfaces.acl.customers_facade import CustomersFacade
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork
+from tests.credit.stored_credit import add_credit_setup, add_payment, add_purchase
 from tests.stored_account import add_account, add_customer
 from tests.stored_store import add_store
 
@@ -109,3 +113,41 @@ async def test_purchase_time_without_time_zone_is_refused(unit_of_work):
 
     with pytest.raises(ValueError):
         await BillingFacade(unit_of_work).get_or_open_cycle(account_id, datetime(2026, 9, 15))
+
+
+async def test_store_wide_reads_cover_payments_cycles_due_and_next_cutoff(
+    unit_of_work, monkeypatch
+):
+    today = date(2026, 11, 20)
+    monkeypatch.setattr(billing_facade_module, "get_business_today", lambda: today)
+    monkeypatch.setattr(
+        billing_facade_module, "get_business_now", lambda: datetime(2026, 11, 20, 12, tzinfo=LIMA)
+    )
+    facade = BillingFacade(unit_of_work)
+    setup = await add_credit_setup(unit_of_work)
+    other_store = await add_credit_setup(unit_of_work, ruc="20999999991", dni="70000003")
+    # Report test N°3 on a single date: S/ 400 plus 26.99, payable on 26/11 in the November cycle.
+    await add_purchase(unit_of_work, setup, mode=PaymentMode.SINGLE_DATE)
+    # Bought after the November cutoff, so it opens the December cycle.
+    later = await add_purchase(
+        unit_of_work, setup, datetime(2026, 11, 18, 9, tzinfo=LIMA), PaymentMode.SINGLE_DATE, 1
+    )
+    elsewhere = await add_purchase(unit_of_work, other_store, mode=PaymentMode.SINGLE_DATE)
+    payment_id = await add_payment(unit_of_work, setup, purchase_id=later.id)
+    await add_payment(unit_of_work, other_store, purchase_id=elsewhere.id)
+
+    due = await facade.list_store_cycles_due(setup.store_id, today, date(2026, 11, 26))
+    december = await facade.list_store_payments(
+        setup.store_id, date(2026, 12, 1), date(2026, 12, 31)
+    )
+    november = await facade.list_store_payments(
+        setup.store_id, date(2026, 11, 1), date(2026, 11, 30)
+    )
+
+    assert [(c.account_id, c.payment_date, c.total) for c in due] == [
+        (setup.account_id, date(2026, 11, 26), Decimal("426.99"))
+    ]
+    assert await facade.get_next_cutoff(setup.store_id) == date(2026, 12, 14)
+    assert await facade.get_next_cutoff(other_store.store_id) is None
+    assert [p.payment_id for p in december] == [payment_id]
+    assert november == []

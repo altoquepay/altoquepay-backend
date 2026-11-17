@@ -1,13 +1,19 @@
 from datetime import date
 from decimal import Decimal
 
-from app.billing.interfaces.acl.billing_facade import BillingFacade, CycleStatement, PaymentSummary
+from app.billing.interfaces.acl.billing_facade import (
+    BillingFacade,
+    CycleDue,
+    CycleStatement,
+    PaymentSummary,
+)
 from app.credit.interfaces.acl.credit_facade import (
     CreditFacade,
     InstallmentSummary,
     PurchaseSummary,
 )
 from app.customers.interfaces.acl.customers_facade import (
+    AccountHolder,
     AccountSummary,
     CreditTerms,
     CustomersFacade,
@@ -34,8 +40,8 @@ class ExternalCustomers(CustomerAccounts):
     async def accounts_of_person(self, customer_id: int) -> list[AccountSummary]:
         return await self._facade.get_accounts_of_person(customer_id)
 
-    async def accounts_of_store(self, store_id: int) -> list[AccountSummary]:
-        return await self._facade.list_accounts_of_store(store_id)
+    async def holders_of_store(self, store_id: int) -> list[AccountHolder]:
+        return await self._facade.list_account_holders(store_id)
 
     async def terms(self, account_id: int) -> CreditTerms:
         return await self._facade.get_credit_terms(account_id)
@@ -70,6 +76,19 @@ class ExternalCredit(CreditReader):
     async def purchase(self, purchase_id: int) -> PurchaseSummary:
         return await self._facade.get_purchase(purchase_id)
 
+    async def store_outstanding_principal(self, store_id: int) -> Decimal:
+        return await self._facade.get_store_outstanding_principal(store_id)
+
+    async def store_installments_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[InstallmentSummary]:
+        return await self._facade.list_store_installments_due(store_id, from_date, to_date)
+
+    async def store_purchases(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PurchaseSummary]:
+        return await self._facade.list_store_purchases(store_id, from_date, to_date)
+
 
 class ExternalBilling(BillingReader):
     def __init__(self, billing_facade: BillingFacade) -> None:
@@ -78,8 +97,18 @@ class ExternalBilling(BillingReader):
     async def statement(self, account_id: int, year: int, month: int) -> CycleStatement | None:
         return await self._facade.get_cycle_statement(account_id, year, month)
 
-    async def payments(self, account_id: int) -> list[PaymentSummary]:
-        return await self._facade.list_payments(account_id)
+    async def store_payments(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PaymentSummary]:
+        return await self._facade.list_store_payments(store_id, from_date, to_date)
+
+    async def store_cycles_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[CycleDue]:
+        return await self._facade.list_store_cycles_due(store_id, from_date, to_date)
+
+    async def next_cutoff(self, store_id: int) -> date | None:
+        return await self._facade.get_next_cutoff(store_id)
 
 
 class ExternalRateCaps(RateCaps):

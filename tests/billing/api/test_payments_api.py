@@ -199,6 +199,22 @@ async def test_overdue_statement_shows_the_late_interest_to_date(client, admin, 
     assert [cycle["id"] for cycle in overdue.json()["items"]] == [single_date.cycle_id]
 
 
+async def test_statement_downloads_as_a_pdf(client, admin, setup, single_date):
+    on(date(2026, 11, 20))
+
+    pdf = await client.get(
+        f"/api/v1/customers/{setup.account_id}/cycles/2026/11/pdf", headers=admin
+    )
+    empty_month = await client.get(
+        f"/api/v1/customers/{setup.account_id}/cycles/2027/3/pdf", headers=admin
+    )
+
+    assert (pdf.status_code, pdf.headers["content-type"]) == (200, "application/pdf")
+    assert pdf.headers["content-disposition"] == 'attachment; filename="estado-2026-11.pdf"'
+    assert pdf.content.startswith(b"%PDF")
+    assert empty_month.status_code == 404
+
+
 async def test_full_prepayment_charges_interest_since_the_last_due_date(
     client, admin, weekly, unit_of_work
 ):
@@ -266,8 +282,11 @@ async def test_targets_of_another_store_are_not_found(client, weekly, unit_of_wo
     statement = await client.get(
         f"/api/v1/customers/{weekly.account_id}/cycles/2026/11", headers=other_admin
     )
+    pdf = await client.get(
+        f"/api/v1/customers/{weekly.account_id}/cycles/2026/11/pdf", headers=other_admin
+    )
 
-    assert (response.status_code, statement.status_code) == (404, 404)
+    assert (response.status_code, statement.status_code, pdf.status_code) == (404, 404, 404)
 
 
 async def test_payments_are_listed_most_recent_first(client, admin, setup, weekly, unit_of_work):

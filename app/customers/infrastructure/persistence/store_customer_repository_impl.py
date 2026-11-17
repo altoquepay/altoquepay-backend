@@ -72,13 +72,16 @@ class StoreCustomerRepositoryImpl(StoreCustomerRepository):
         )
         return [account_to_domain(model) for model in models]
 
-    async def list_by_store(self, store_id: int) -> list[StoreCustomer]:
-        models = await self._session.scalars(
-            select(StoreCustomerModel)
+    async def list_by_store(self, store_id: int) -> list[tuple[StoreCustomer, Customer]]:
+        rows = await self._session.execute(
+            select(StoreCustomerModel, CustomerModel)
+            .join(CustomerModel, CustomerModel.id == StoreCustomerModel.customer_id)
             .where(StoreCustomerModel.store_id == store_id)
             .order_by(StoreCustomerModel.id)
         )
-        return [account_to_domain(model) for model in models]
+        return [
+            (account_to_domain(account), customer_to_domain(person)) for account, person in rows
+        ]
 
     async def list_page(
         self, store_id: int, account_filter: AccountFilter, offset: int, size: int

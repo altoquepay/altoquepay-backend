@@ -7,6 +7,8 @@ Rates are percentages, as stored: 75% is Decimal("75.0000000").
 from dataclasses import dataclass
 from decimal import Decimal
 
+from app.customers.domain.model.aggregates.customer import Customer
+from app.customers.domain.model.aggregates.store_customer import StoreCustomer
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
@@ -36,6 +38,14 @@ class AccountSummary:
     account_id: int
     store_id: int
     status: str
+
+
+@dataclass(frozen=True)
+class AccountHolder:
+    account_id: int
+    status: str
+    dni: str
+    full_name: str
 
 
 def account_not_found() -> BusinessError:
@@ -88,13 +98,22 @@ class CustomersFacade:
             if account.id is not None
         ]
 
-    async def list_accounts_of_store(self, store_id: int) -> list[AccountSummary]:
-        """Return the active and inactive accounts of a store, for its reports."""
+    async def list_account_holders(self, store_id: int) -> list[AccountHolder]:
+        """Return the active and inactive accounts of a store with who holds them, oldest first."""
         return [
-            AccountSummary(account.id, account.store_id, account.status.value)
-            for account in await self._accounts.list_by_store(store_id)
-            if account.id is not None
+            to_account_holder(account, person)
+            for account, person in await self._accounts.list_by_store(store_id)
         ]
+
+    async def get_account_holder(self, account_id: int) -> AccountHolder:
+        """Return an account with who holds it. Raises NOT_FOUND (404) if it does not exist."""
+        account = await self._accounts.find_by_id(account_id)
+        if account is None:
+            raise account_not_found()
+        person = await self._customers.find_by_id(account.customer_id)
+        if person is None:
+            raise account_not_found()
+        return to_account_holder(account, person)
 
     async def count_by_store(self, store_id: int) -> int:
         """Return the number of active accounts of a store."""
@@ -109,3 +128,14 @@ class CustomersFacade:
         if customer_id is None:
             raise BusinessError("NOT_FOUND", "The customer does not exist.", status=404)
         return customer_id
+
+
+def to_account_holder(account: StoreCustomer, person: Customer) -> AccountHolder:
+    if account.id is None:
+        raise ValueError("Only a stored account has a holder.")
+    return AccountHolder(
+        account.id,
+        account.status.value,
+        person.dni.value,
+        f"{person.first_names} {person.last_names}",
+    )

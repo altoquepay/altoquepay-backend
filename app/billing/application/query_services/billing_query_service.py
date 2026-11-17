@@ -112,3 +112,18 @@ class BillingQueryService:
         self, store_id: int, payment_filter: PaymentFilter, offset: int, size: int
     ) -> tuple[list[Payment], int]:
         return await self._payments.list_page(store_id, payment_filter, offset, size)
+
+    async def list_payments_of_store(
+        self, store_id: int, payment_filter: PaymentFilter
+    ) -> list[Payment]:
+        return await self._payments.list_by_store(store_id, payment_filter)
+
+    async def list_cycles_due(
+        self, store_id: int, from_date: date, to_date: date, today: date, now: datetime
+    ) -> list[BillingCycle]:
+        """Return the closed, unpaid cycles payable within the range, closing due ones first."""
+        await self._closing.close_due(today, now, store_id=store_id)
+        return await self._cycles.list_closed_by_payment_date(store_id, from_date, to_date)
+
+    async def next_cutoff(self, store_id: int, today: date) -> date | None:
+        return await self._cycles.find_next_cutoff(store_id, today)

@@ -1,19 +1,22 @@
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Response
 
 from app.billing.application.command_services.payment_service import PaymentService
 from app.billing.application.ports.account_directory import AccountDirectory
+from app.billing.application.ports.store_directory import StoreDirectory
 from app.billing.application.query_services.billing_query_service import BillingQueryService
 from app.billing.domain.model.aggregates.billing_cycle import CycleStatus
 from app.billing.domain.model.aggregates.payment import PaymentKind
 from app.billing.domain.repositories.billing_cycle_repository import CycleFilter
 from app.billing.domain.repositories.payment_repository import PaymentFilter
+from app.billing.infrastructure.pdf.statement_pdf import render_statement
 from app.billing.interfaces.rest.dependencies import (
     get_account_directory,
     get_billing_query_service,
     get_payment_service,
+    get_store_directory,
 )
 from app.billing.interfaces.rest.resources.billing_resources import (
     CycleResource,
@@ -44,6 +47,7 @@ Now = Annotated[datetime, Depends(get_business_now)]
 Payments = Annotated[PaymentService, Depends(get_payment_service)]
 Queries = Annotated[BillingQueryService, Depends(get_billing_query_service)]
 Accounts = Annotated[AccountDirectory, Depends(get_account_directory)]
+Stores = Annotated[StoreDirectory, Depends(get_store_directory)]
 
 
 @router.get("/cycles")
@@ -90,6 +94,35 @@ async def get_cycle_statement(
         accounts, store_id, customer_id, year, month, today, now
     )
     return to_statement_resource(statement)
+
+
+@router.get(
+    "/customers/{customer_id}/cycles/{year}/{month}/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def get_cycle_statement_pdf(
+    customer_id: int,
+    year: Annotated[int, Path(ge=2000, le=2100)],
+    month: Annotated[int, Path(ge=1, le=12)],
+    store_id: StoreId,
+    queries: Queries,
+    accounts: Accounts,
+    stores: Stores,
+    today: Today,
+    now: Now,
+) -> Response:
+    """Return the same statement as a PDF to download."""
+    statement = await queries.get_store_statement(
+        accounts, store_id, customer_id, year, month, today, now
+    )
+    holder = await accounts.get_holder(customer_id)
+    store_name = await stores.business_name(store_id)
+    return Response(
+        render_statement(statement, store_name, holder, now),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="estado-{year}-{month:02d}.pdf"'},
+    )
 
 
 @router.post("/payments/quote")

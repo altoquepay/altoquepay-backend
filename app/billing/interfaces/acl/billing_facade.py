@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from app.billing.application.command_services.billing_cycle_service import BillingCycleService
 from app.billing.application.query_services.billing_query_service import BillingQueryService
 from app.billing.domain.model.aggregates.payment import Payment
+from app.billing.domain.repositories.payment_repository import PaymentFilter
 from app.billing.infrastructure.acl.external_accounts import ExternalAccounts
 from app.billing.infrastructure.acl.external_credit import ExternalCredit
 from app.billing.infrastructure.persistence.billing_cycle_repository_impl import (
@@ -41,6 +42,16 @@ class CycleStatement:
     capital: Decimal
     ordinary_interest: Decimal
     late_interest: Decimal
+    total: Decimal
+
+
+@dataclass(frozen=True)
+class CycleDue:
+    """A closed cycle whose statement is still to be paid on payment_date."""
+
+    cycle_id: int
+    account_id: int
+    payment_date: date
     total: Decimal
 
 
@@ -118,6 +129,35 @@ class BillingFacade:
         return [
             to_payment_summary(payment) for payment in await self._queries.list_payments(account_id)
         ]
+
+    async def list_store_payments(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[PaymentSummary]:
+        """Return the store's payments made between the two days, most recent first."""
+        payments = await self._queries.list_payments_of_store(
+            store_id, PaymentFilter(from_date=from_date, to_date=to_date)
+        )
+        return [to_payment_summary(payment) for payment in payments]
+
+    async def list_store_cycles_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[CycleDue]:
+        """Return the store's closed, unpaid cycles payable within the range, by payment date.
+
+        Cycles whose cutoff already ended are closed first, as on every billing read.
+        """
+        cycles = await self._queries.list_cycles_due(
+            store_id, from_date, to_date, get_business_today(), get_business_now()
+        )
+        return [
+            CycleDue(cycle.id, cycle.store_customer_id, cycle.payment_date, cycle.total.amount)
+            for cycle in cycles
+            if cycle.id is not None and cycle.total is not None
+        ]
+
+    async def get_next_cutoff(self, store_id: int) -> date | None:
+        """Return the earliest cutoff day, from today on, among the store's open cycles."""
+        return await self._queries.next_cutoff(store_id, get_business_today())
 
 
 def to_payment_summary(payment: Payment) -> PaymentSummary:

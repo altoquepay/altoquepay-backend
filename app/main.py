@@ -2,13 +2,12 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.billing.interfaces.rest.router import router as billing_router
+from app.catalog.interfaces.rest.router import media_router as catalog_media_router
 from app.catalog.interfaces.rest.router import router as catalog_router
 from app.credit.interfaces.rest.router import router as credit_router
 from app.customers.interfaces.rest.router import router as customers_router
@@ -29,7 +28,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await engine.dispose()
 
 
-app = FastAPI(title="AlToque Pay API", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="AlToque Pay API", version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins_list,
@@ -45,11 +44,7 @@ app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(credit_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
 app.include_router(reporting_router, prefix="/api/v1")
-
-# Uploaded files, such as product images. The folder must exist before StaticFiles reads it.
-media_dir = Path(get_settings().media_dir)
-media_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=media_dir), name="media")
+app.include_router(catalog_media_router)
 
 
 @app.get("/health")

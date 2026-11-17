@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-16
+
+### Added
+- **Reporting**: the dashboard lists what falls due in the next 7 days (`upcoming`: installments and closed cycle statements, with their type, customer, date and amount) and the store's next cycle cutoff (`next_cutoff`).
+- **Billing**: the cycle statement as a downloadable PDF at `/customers/{customer_id}/cycles/{year}/{month}/pdf`, and `CustomersFacade.get_account_holder` for the holder's name and DNI.
+- **Catalog**: the `product_images` table, with images served at `/media/products/{name}` and cached for a year.
+
+### Changed
+- **Reporting**: the dashboard and the period report read the whole store at once through new store-wide facade methods, so their query count no longer grows with the number of customers.
+- **Catalog**: product images are stored in PostgreSQL instead of the container disk, so they survive redeploys; replacing an image deletes the previous one.
+- **Customers**: `CustomersFacade.list_account_holders` replaces `list_accounts_of_store` and returns each account with its holder's DNI and name.
+
+### Removed
+- **Catalog**: the `MEDIA_DIR` setting and the static `/media` mount.
+
+### Known gaps
+- The dashboard's `overdue_amount` counts overdue installments only, not overdue single date cycle statements.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

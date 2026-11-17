@@ -5,6 +5,7 @@ alembic==1.20.1
 pydantic-settings==2.16.2
 PyJWT==2.15.1
 pwdlib[argon2]==0.3.1
+reportlab==5.1.0
 tzdata==2026.6
 
 # development

@@ -10,7 +10,14 @@ from app.credit.interfaces.acl.credit_facade import CreditFacade
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork
-from tests.credit.stored_credit import LIMA, add_credit_setup, add_payment, add_purchase
+from tests.credit.stored_credit import (
+    LIMA,
+    CreditSetup,
+    add_credit_setup,
+    add_payment,
+    add_purchase,
+)
+from tests.stored_account import add_account, add_customer
 
 
 @pytest.fixture
@@ -127,3 +134,34 @@ async def test_account_without_purchases_has_nothing_outstanding(unit_of_work, s
 
     assert await facade.get_outstanding_principal(setup.account_id) == Decimal("0")
     assert await facade.list_purchases(setup.account_id) == []
+
+
+async def test_store_wide_reads_add_up_every_account_of_the_store_only(unit_of_work, setup):
+    facade = CreditFacade(unit_of_work)
+    neighbor = await add_customer(unit_of_work, dni="70000002")
+    second_account = await add_account(unit_of_work, setup.store_id, neighbor.id, 14, 26)
+    second = CreditSetup(setup.store_id, second_account.id, setup.product_id, setup.user_id)
+    other_store = await add_credit_setup(unit_of_work, ruc="20999999991", dni="70000003")
+    weekly = await add_purchase(unit_of_work, setup)
+    single_date = await add_single_date(unit_of_work, second, quantity=2)
+    await add_single_date(unit_of_work, other_store)
+
+    outstanding = await facade.get_store_outstanding_principal(setup.store_id)
+    due = await facade.list_store_installments_due(
+        setup.store_id, date(2026, 12, 4), date(2026, 12, 17)
+    )
+    october_and_november = await facade.list_store_purchases(
+        setup.store_id, date(2026, 10, 1), date(2026, 11, 30)
+    )
+    november = await facade.list_store_purchases(
+        setup.store_id, date(2026, 11, 1), date(2026, 11, 30)
+    )
+
+    # 426.99 capitalized by the weekly purchase plus 200.00 on a single date.
+    assert outstanding == Decimal("626.99")
+    assert [(i.number, i.account_id) for i in due] == [
+        (2, setup.account_id),
+        (3, setup.account_id),
+    ]
+    assert [p.purchase_id for p in october_and_november] == [single_date.id, weekly.id]
+    assert [p.purchase_id for p in november] == [single_date.id]

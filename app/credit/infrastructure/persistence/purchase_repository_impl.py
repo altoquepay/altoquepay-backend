@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.credit.domain.model.aggregates.purchase import (
@@ -31,6 +31,25 @@ def start_of_business_day(day: date) -> datetime:
 INSTALLMENT_ROWS = select(InstallmentModel, PurchaseModel.id, PurchaseModel.store_customer_id).join(
     PurchaseModel, InstallmentModel.purchase_id == PurchaseModel.id
 )
+
+
+MOST_RECENT_FIRST = (PurchaseModel.purchased_at.desc(), PurchaseModel.id.desc())
+
+
+def filtered(store_id: int, purchase_filter: PurchaseFilter) -> Select:
+    query = select(PurchaseModel).where(PurchaseModel.store_id == store_id)
+    if purchase_filter.account_id is not None:
+        query = query.where(PurchaseModel.store_customer_id == purchase_filter.account_id)
+    if purchase_filter.mode is not None:
+        query = query.where(PurchaseModel.mode == purchase_filter.mode.value)
+    if purchase_filter.from_date is not None:
+        query = query.where(
+            PurchaseModel.purchased_at >= start_of_business_day(purchase_filter.from_date)
+        )
+    if purchase_filter.to_date is not None:
+        next_day = purchase_filter.to_date + timedelta(days=1)
+        query = query.where(PurchaseModel.purchased_at < start_of_business_day(next_day))
+    return query
 
 
 def to_entries(rows) -> list[InstallmentEntry]:
@@ -85,7 +104,7 @@ class PurchaseRepositoryImpl(PurchaseRepository):
         return await self._list(
             select(PurchaseModel)
             .where(PurchaseModel.store_customer_id == account_id)
-            .order_by(PurchaseModel.purchased_at.desc(), PurchaseModel.id.desc())
+            .order_by(*MOST_RECENT_FIRST)
         )
 
     async def list_by_cycle(self, cycle_id: int) -> list[Purchase]:
@@ -95,27 +114,23 @@ class PurchaseRepositoryImpl(PurchaseRepository):
             .order_by(PurchaseModel.purchased_at, PurchaseModel.id)
         )
 
+    async def list_by_store(self, store_id: int, purchase_filter: PurchaseFilter) -> list[Purchase]:
+        return await self._list(filtered(store_id, purchase_filter).order_by(*MOST_RECENT_FIRST))
+
+    async def list_active_by_store(self, store_id: int) -> list[Purchase]:
+        return await self._list(
+            select(PurchaseModel).where(
+                PurchaseModel.store_id == store_id,
+                PurchaseModel.status == PurchaseStatus.ACTIVE.value,
+            )
+        )
+
     async def list_page(
         self, store_id: int, purchase_filter: PurchaseFilter, offset: int, size: int
     ) -> tuple[list[Purchase], int]:
-        query = select(PurchaseModel).where(PurchaseModel.store_id == store_id)
-        if purchase_filter.account_id is not None:
-            query = query.where(PurchaseModel.store_customer_id == purchase_filter.account_id)
-        if purchase_filter.mode is not None:
-            query = query.where(PurchaseModel.mode == purchase_filter.mode.value)
-        if purchase_filter.from_date is not None:
-            query = query.where(
-                PurchaseModel.purchased_at >= start_of_business_day(purchase_filter.from_date)
-            )
-        if purchase_filter.to_date is not None:
-            next_day = purchase_filter.to_date + timedelta(days=1)
-            query = query.where(PurchaseModel.purchased_at < start_of_business_day(next_day))
+        query = filtered(store_id, purchase_filter)
         total = await self._session.scalar(select(func.count()).select_from(query.subquery()))
-        purchases = await self._list(
-            query.order_by(PurchaseModel.purchased_at.desc(), PurchaseModel.id.desc())
-            .offset(offset)
-            .limit(size)
-        )
+        purchases = await self._list(query.order_by(*MOST_RECENT_FIRST).offset(offset).limit(size))
         return purchases, total or 0
 
     async def list_installments(
@@ -153,14 +168,14 @@ class PurchaseRepositoryImpl(PurchaseRepository):
     async def list_installments_due(
         self, account_id: int, from_date: date, to_date: date
     ) -> list[InstallmentEntry]:
-        rows = await self._session.execute(
-            INSTALLMENT_ROWS.where(
-                PurchaseModel.store_customer_id == account_id,
-                InstallmentModel.status == InstallmentStatus.PENDING.value,
-                InstallmentModel.due_date.between(from_date, to_date),
-            ).order_by(InstallmentModel.due_date, InstallmentModel.id)
+        return await self._installments_due(
+            PurchaseModel.store_customer_id == account_id, from_date, to_date
         )
-        return to_entries(rows)
+
+    async def list_store_installments_due(
+        self, store_id: int, from_date: date, to_date: date
+    ) -> list[InstallmentEntry]:
+        return await self._installments_due(PurchaseModel.store_id == store_id, from_date, to_date)
 
     async def find_installment(self, installment_id: int) -> InstallmentEntry | None:
         rows = await self._session.execute(
@@ -168,6 +183,18 @@ class PurchaseRepositoryImpl(PurchaseRepository):
         )
         entries = to_entries(rows)
         return entries[0] if entries else None
+
+    async def _installments_due(
+        self, belongs: ColumnElement[bool], from_date: date, to_date: date
+    ) -> list[InstallmentEntry]:
+        rows = await self._session.execute(
+            INSTALLMENT_ROWS.where(
+                belongs,
+                InstallmentModel.status == InstallmentStatus.PENDING.value,
+                InstallmentModel.due_date.between(from_date, to_date),
+            ).order_by(InstallmentModel.due_date, InstallmentModel.id)
+        )
+        return to_entries(rows)
 
     async def _list(self, query: Select) -> list[Purchase]:
         return [to_domain(model) for model in await self._session.scalars(query)]

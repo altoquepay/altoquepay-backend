@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, LargeBinary, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.database import Base
@@ -28,3 +28,13 @@ class ProductModel(Base):
     list_price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     # Products are deactivated, never deleted, since past purchases reference them.
     is_active: Mapped[bool] = mapped_column(server_default="true")
+
+
+class ProductImageModel(Base):
+    """The uploaded image files, kept in the database so they survive every redeploy."""
+
+    __tablename__ = "product_images"
+
+    # The name in the image's URL: <store id>/<product id>-<random>.<extension>.
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
