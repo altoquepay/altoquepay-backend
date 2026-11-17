@@ -67,7 +67,7 @@ fastapi dev app/main.py
 
 The API starts on `http://localhost:8000` and reloads on file changes. The Swagger UI is available at `http://localhost:8000/docs`.
 
-Sign-in allows 20 attempts per IP every 15 minutes. Behind a reverse proxy, such as Azure App Service, set `FORWARDED_ALLOW_IPS` to the proxy's address (or `*` when only the proxy can reach the app), so Uvicorn reads each client's IP from `X-Forwarded-For`. Otherwise every user shares the proxy's IP, and its limit.
+Sign-in and password reset requests share 20 attempts per IP every 15 minutes. Behind a reverse proxy, such as Azure App Service, set `FORWARDED_ALLOW_IPS` to the proxy's address (or `*` when only the proxy can reach the app), so Uvicorn reads each client's IP from `X-Forwarded-For`. Otherwise every user shares the proxy's IP, and its limit.
 
 ### Tests and linting
 
