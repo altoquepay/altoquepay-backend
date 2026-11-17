@@ -59,18 +59,16 @@ async def test_repeated_email_is_rejected(facade, store_id):
     )
 
 
-async def test_customer_user_is_named_after_the_dni(facade, unit_of_work):
-    credentials = await facade.create_customer_user("70000001")
+async def test_customer_user_is_named_after_the_dni_with_a_password_nobody_knows(
+    facade, unit_of_work
+):
+    user_id = await facade.create_customer_user("70000001")
 
     summary = await facade.find_user_by_username("70000001")
-    assert credentials.username == "70000001"
-    assert summary == UserSummary(credentials.user_id, "70000001", Role.CUSTOMER, True)
-    assert (
-        await Argon2PasswordHasher().verify(
-            credentials.temporary_password,
-            await stored_password_hash(unit_of_work, credentials.user_id),
-        )
-    )[0]
+    password_hash = await stored_password_hash(unit_of_work, user_id)
+    assert summary == UserSummary(user_id, "70000001", Role.CUSTOMER, True)
+    for guess in ("70000001", ""):
+        assert not (await Argon2PasswordHasher().verify(guess, password_hash))[0]
 
 
 async def test_dni_with_a_user_is_rejected(facade):
@@ -82,22 +80,20 @@ async def test_dni_with_a_user_is_rejected(facade):
     assert (error.value.code, error.value.status) == ("USERNAME_TAKEN", 409)
 
 
-async def test_reset_gives_a_new_temporary_password(facade, unit_of_work):
-    first = await facade.create_customer_user("70000001")
-
-    reset = await facade.reset_password(first.user_id)
-
-    assert (reset.user_id, reset.username) == (first.user_id, "70000001")
-    assert reset.temporary_password != first.temporary_password
-    password_hash = await stored_password_hash(unit_of_work, first.user_id)
-    assert (await Argon2PasswordHasher().verify(reset.temporary_password, password_hash))[0]
-
-
-async def test_reset_of_a_missing_user_is_not_found(facade):
-    with pytest.raises(BusinessError) as error:
-        await facade.reset_password(999_999)
-    assert (error.value.code, error.value.status) == ("NOT_FOUND", 404)
-
-
 async def test_unknown_username_is_none(facade):
     assert await facade.find_user_by_username("nadie@bodega-test.pe") is None
+
+
+async def test_a_token_is_current_until_the_password_changes(facade, unit_of_work):
+    users = UserRepositoryImpl(unit_of_work.session)
+    user = await users.find_by_id(await facade.create_customer_user("70000001"))
+    assert user is not None and user.id is not None
+    issued_with = user.password_version
+
+    assert await facade.is_password_current(user.id, issued_with)
+    user.change_password("another hash")
+    await users.update(user)
+
+    assert not await facade.is_password_current(user.id, issued_with)
+    assert await facade.is_password_current(user.id, issued_with + 1)
+    assert not await facade.is_password_current(999_999, 0)

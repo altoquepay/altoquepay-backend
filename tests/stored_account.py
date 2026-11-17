@@ -1,5 +1,6 @@
 """A customer account saved in the session of a test, for the tables that reference it."""
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.customers.domain.model.aggregates.customer import Customer
@@ -33,8 +34,12 @@ async def add_account(
     cutoff_day: int = 20,
     payment_day: int = 26,
     status: AccountStatus = AccountStatus.ACTIVE,
+    portal_linked: bool = True,
 ) -> StoreCustomer:
-    """Flush a new account with a 75% TEA and a 10% late TEA, without committing it."""
+    """Flush a new account with a 75% TEA and a 10% late TEA, without committing it.
+
+    It is in the customer's portal, and trusted, unless portal_linked is False.
+    """
     account = StoreCustomer(
         store_id=store_id,
         customer_id=customer_id,
@@ -47,6 +52,8 @@ async def add_account(
             max_weeks=4,
         ),
         status=status,
+        portal_linked_at=datetime.now(UTC) if portal_linked else None,
+        portal_trusted=portal_linked,
     )
     await StoreCustomerRepositoryImpl(unit_of_work.session).add(account)
     return account

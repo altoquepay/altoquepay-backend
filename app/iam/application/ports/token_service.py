@@ -13,6 +13,7 @@ class TokenClaims:
     must_change_password: bool
     store_id: int | None = None
     customer_id: int | None = None
+    password_version: int = 0
 
 
 class TokenService(ABC):

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-11-17
+
+Breaking for API clients: `POST /customers` returns `{account, access_code}` and `POST /customers/{account_id}/reset-password` is gone. Run `alembic upgrade head`: there are three new migrations.
+
+### Added
+- **Customers**: one-time store access codes, 12 characters without `0`, `O`, `1` or `I`, valid 48 hours and stored as SHA-256. Opening an account issues one, and `POST /customers/{account_id}/access-code` issues a new one that replaces the previous.
+- **IAM**: `POST /auth/redeem-access-code` with `{dni, code, new_password}`. The customer chooses their own password with a store's code, which links that store to their portal and unlinks the others.
+- **Customers**: `POST /me/stores/link` adds a store to the signed-in customer's portal with that store's code.
+- **Customers**: trusted stores. Once a customer has linked a store, only a store they trust can restore their access without a session; any other answers `STORE_NOT_TRUSTED` (403). The system administrator settles disputes with `POST /admin/customers/trusted-store`. A deactivated store's codes answer `STORE_INACTIVE` (403).
+- **IAM**: `users.password_version`, carried in the JWT and checked on every customer request, so a customer's older tokens stop working when the password changes.
+
+### Changed
+- **Customers**: `POST /customers` returns the account and its access code, and `CustomerAccountResource` gains `portal_linked`.
+- **Reporting**: the customer portal shows only the accounts linked with their store's code; any other answers 404.
+- **IAM**: customer users start with a random password nobody knows; `must_change_password` now applies only to the first system administrator.
+- **Database**: `store_customers` gains the portal link, access code and trust columns, and `users` gains `password_version`.
+
+### Removed
+- **Customers**: `POST /customers/{account_id}/reset-password` and `CredentialsResource`.
+- **IAM**: `IamFacade.reset_password`, `TemporaryCredentials` and `User.assign_temporary_password`.
+
+### Security
+- A store could create or reset the password of a DNI's single user, sign in as that person and read their debt in other stores. Stores no longer know customer passwords, and each store links only its own account to the portal.
+
+### Known gaps
+- A store the customer trusts, or one that activates someone's DNI before they do, can lock them out until the system administrator steps in. There is no support screen yet.
+- Customers get no notice outside the app when their access is restored.
+- Sign-in has no attempt limit.
+
 ## [0.4.1] - 2026-11-17
 
 ### Fixed

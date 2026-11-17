@@ -121,5 +121,6 @@ class AuthenticationService:
                 must_change_password=user.must_change_password,
                 store_id=user.store_id,
                 customer_id=customer_id,
+                password_version=user.password_version,
             )
         )

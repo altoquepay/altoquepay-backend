@@ -59,13 +59,13 @@ async def test_store_admin_signs_in_with_the_email_in_any_case(context):
     ]
 
 
-async def test_customer_token_carries_the_person_and_the_password_block(context):
-    customer = await context.add(User.customer(Dni("01234567"), "hashed:Temporal7k"))
+async def test_customer_token_carries_the_person(context):
+    customer = await context.add(User.customer(Dni("01234567"), "hashed:mi-clave-segura"))
 
-    await context.service.sign_in(SignInCommand("01234567", "Temporal7k"))
+    await context.service.sign_in(SignInCommand("01234567", "mi-clave-segura"))
 
     assert context.tokens.issued == [
-        TokenClaims(customer.id, Role.CUSTOMER, must_change_password=True, customer_id=100)
+        TokenClaims(customer.id, Role.CUSTOMER, must_change_password=False, customer_id=100)
     ]
 
 
@@ -141,16 +141,18 @@ async def test_sign_in_writes_nothing_when_the_hash_is_current(context):
 
 
 async def test_changing_the_temporary_password_returns_an_unblocked_token(context):
-    customer = await context.add(User.customer(Dni("01234567"), "hashed:Temporal7k"))
+    admin = await context.add(User.system_admin(Email("admin@altoquepay.pe"), "hashed:Temporal7k"))
 
     signed_in = await context.service.change_password(
-        ChangePasswordCommand(customer.id, "Temporal7k", "mi-clave-segura")
+        ChangePasswordCommand(admin.id, "Temporal7k", "mi-clave-segura")
     )
 
-    stored = context.users.stored[customer.id]
+    stored = context.users.stored[admin.id]
     assert (stored.password_hash, stored.must_change_password) == ("hashed:mi-clave-segura", False)
     assert signed_in.user.must_change_password is False
     assert context.tokens.issued[-1].must_change_password is False
+    # The new token carries the new password's version, so it outlives the older ones.
+    assert (stored.password_version, context.tokens.issued[-1].password_version) == (1, 1)
     assert context.unit_of_work.commits == 1
 
 

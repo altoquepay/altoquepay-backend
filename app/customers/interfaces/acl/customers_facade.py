@@ -4,11 +4,19 @@ An account is a row of store_customers: the conditions of one person in one stor
 Rates are percentages, as stored: 75% is Decimal("75.0000000").
 """
 
+import logging
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.model.aggregates.store_customer import StoreCustomer
+from app.customers.domain.services.access_code import (
+    inactive_store,
+    invalid_access_code,
+    restoring_account,
+)
+from app.customers.infrastructure.acl.external_stores import ExternalStores
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
@@ -16,7 +24,11 @@ from app.customers.infrastructure.persistence.store_customer_repository_impl imp
     StoreCustomerRepositoryImpl,
 )
 from app.shared.domain.errors import BusinessError
+from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.unit_of_work import UnitOfWork
+from app.stores.interfaces.acl.stores_facade import StoresFacade
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,9 +47,12 @@ class CreditTerms:
 
 @dataclass(frozen=True)
 class AccountSummary:
+    """portal_linked tells whether the customer may see the account in their portal."""
+
     account_id: int
     store_id: int
     status: str
+    portal_linked: bool
 
 
 @dataclass(frozen=True)
@@ -58,6 +73,7 @@ class CustomersFacade:
     def __init__(self, unit_of_work: UnitOfWork) -> None:
         self._accounts = StoreCustomerRepositoryImpl(unit_of_work.session)
         self._customers = CustomerRepositoryImpl(unit_of_work.session)
+        self._stores = ExternalStores(StoresFacade(unit_of_work))
 
     async def get_credit_terms(self, account_id: int) -> CreditTerms:
         """Return the conditions of an account. Callers compare its store_id with the token's.
@@ -93,10 +109,48 @@ class CustomersFacade:
     async def get_accounts_of_person(self, customer_id: int) -> list[AccountSummary]:
         """Return the active and inactive accounts of a person in every store."""
         return [
-            AccountSummary(account.id, account.store_id, account.status.value)
+            AccountSummary(
+                account.id, account.store_id, account.status.value, account.is_portal_linked
+            )
             for account in await self._accounts.list_by_customer(customer_id)
             if account.id is not None
         ]
+
+    async def redeem_access_code(self, dni: str, code: str, now: datetime) -> int:
+        """Link the account whose store issued the code and return the user of its person.
+
+        It is redeemed without a session, to choose a new password, so only that store vouches
+        for who holds it: the person's accounts in other stores leave the portal until each of
+        them hands over a new code. Raises INVALID_ACCESS_CODE (422) if the DNI and the code do
+        not match a code still in force, STORE_NOT_TRUSTED (403) if the person already trusts
+        other stores but not this one, and STORE_INACTIVE (403) if the store was deactivated.
+        """
+        person = await self._customers.find_by_dni(Dni(dni.strip()))
+        if person is None or person.id is None:
+            raise invalid_access_code()
+        accounts = await self._accounts.list_by_customer(person.id)
+        redeemed = restoring_account(accounts, code, now)
+        # A deactivated store cannot issue codes; this stops the ones it issued before.
+        if not await self._stores.is_store_active(redeemed.store_id):
+            raise inactive_store()
+        # Support reads it to find which store restored an access the customer did not ask for;
+        # a warning, so it shows even without a logging setup.
+        logger.warning(
+            "Store %s restored the access of customer %s with account %s at %s",
+            redeemed.store_id,
+            person.id,
+            redeemed.id,
+            now.isoformat(),
+        )
+        # shortcut: two requests redeeming the same code at the same time both pass; lock the
+        # person's accounts first if a code ever has to be strictly single use.
+        for account in accounts:
+            if account is redeemed:
+                account.link_portal(now)
+            else:
+                account.unlink_portal()
+            await self._accounts.update(account)
+        return person.user_id
 
     async def list_account_holders(self, store_id: int) -> list[AccountHolder]:
         """Return the active and inactive accounts of a store with who holds them, oldest first."""

@@ -10,6 +10,7 @@ from app.billing.interfaces.rest.router import router as billing_router
 from app.catalog.interfaces.rest.router import media_router as catalog_media_router
 from app.catalog.interfaces.rest.router import router as catalog_router
 from app.credit.interfaces.rest.router import router as credit_router
+from app.customers.interfaces.rest.router import portal_router as customers_portal_router
 from app.customers.interfaces.rest.router import router as customers_router
 from app.iam.infrastructure.first_admin import create_first_system_admin
 from app.iam.interfaces.rest.router import router as iam_router
@@ -28,7 +29,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await engine.dispose()
 
 
-app = FastAPI(title="AlToque Pay API", version="0.4.1", lifespan=lifespan)
+app = FastAPI(title="AlToque Pay API", version="0.5.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins_list,
@@ -40,6 +41,7 @@ app.include_router(iam_router, prefix="/api/v1")
 app.include_router(regulation_router, prefix="/api/v1")
 app.include_router(stores_router, prefix="/api/v1")
 app.include_router(customers_router, prefix="/api/v1")
+app.include_router(customers_portal_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(credit_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
