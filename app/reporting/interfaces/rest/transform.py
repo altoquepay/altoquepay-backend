@@ -96,6 +96,7 @@ def to_dashboard(dashboard: Dashboard) -> DashboardResource:
         active_customers=dashboard.active_customers,
         outstanding_principal=dashboard.outstanding_principal,
         overdue_installments=dashboard.overdue_installments,
+        overdue_statements=dashboard.overdue_statements,
         overdue_amount=dashboard.overdue_amount,
         purchases_this_month=PurchaseTotalsResource(**asdict(dashboard.purchases_this_month)),
         payments_this_month=PaymentTotalsResource(**asdict(dashboard.payments_this_month)),
