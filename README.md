@@ -18,7 +18,7 @@ Group 5, section 7707. Finanzas e Ingeniería Económica, Universidad Peruana de
 
 ## Tech stack
 
-- Python 3.12 or newer
+- Python 3.13 or newer
 - FastAPI, served by Uvicorn, with Pydantic for validation
 - PostgreSQL 16 with SQLAlchemy 2.0 (async) and asyncpg
 - Alembic for database migrations
@@ -31,7 +31,7 @@ Group 5, section 7707. Finanzas e Ingeniería Económica, Universidad Peruana de
 
 ### Requirements
 
-- Python 3.12 or newer
+- Python 3.13 or newer
 - Docker with Docker Compose
 
 ### Run in development
