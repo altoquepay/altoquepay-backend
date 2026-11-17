@@ -38,7 +38,7 @@ async def add_account(
 ) -> StoreCustomer:
     """Flush a new account with a 75% TEA and a 10% late TEA, without committing it.
 
-    It is in the customer's portal unless portal_linked is False.
+    It is in the customer's portal, and trusted, unless portal_linked is False.
     """
     account = StoreCustomer(
         store_id=store_id,
@@ -53,6 +53,7 @@ async def add_account(
         ),
         status=status,
         portal_linked_at=datetime.now(UTC) if portal_linked else None,
+        portal_trusted=portal_linked,
     )
     await StoreCustomerRepositoryImpl(unit_of_work.session).add(account)
     return account

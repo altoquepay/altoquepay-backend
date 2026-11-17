@@ -4,13 +4,14 @@ An account is a row of store_customers: the conditions of one person in one stor
 Rates are percentages, as stored: 75% is Decimal("75.0000000").
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.model.aggregates.store_customer import StoreCustomer
-from app.customers.domain.services.access_code import invalid_access_code, redeemed_account
+from app.customers.domain.services.access_code import invalid_access_code, restoring_account
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
@@ -20,6 +21,8 @@ from app.customers.infrastructure.persistence.store_customer_repository_impl imp
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.unit_of_work import UnitOfWork
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -112,13 +115,22 @@ class CustomersFacade:
         It is redeemed without a session, to choose a new password, so only that store vouches
         for who holds it: the person's accounts in other stores leave the portal until each of
         them hands over a new code. Raises INVALID_ACCESS_CODE (422) if the DNI and the code do
-        not match a code still in force.
+        not match a code still in force, and STORE_NOT_TRUSTED (403) if the person already
+        trusts other stores but not this one.
         """
         person = await self._customers.find_by_dni(Dni(dni.strip()))
         if person is None or person.id is None:
             raise invalid_access_code()
         accounts = await self._accounts.list_by_customer(person.id)
-        redeemed = redeemed_account(accounts, code, now)
+        redeemed = restoring_account(accounts, code, now)
+        # Support reads it to find which store restored an access the customer did not ask for;
+        # a warning, so it shows even without a logging setup.
+        logger.warning(
+            "Store %s restored the access of customer %s with account %s",
+            redeemed.store_id,
+            person.id,
+            redeemed.id,
+        )
         # shortcut: two requests redeeming the same code at the same time both pass; lock the
         # person's accounts first if a code ever has to be strictly single use.
         for account in accounts:

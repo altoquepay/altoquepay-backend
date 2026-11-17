@@ -63,6 +63,8 @@ class StoreCustomerModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Set when the customer redeems the access code of this store; empty hides it from the portal.
     portal_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set once the customer links it; then only a trusted store may restore their access.
+    portal_trusted: Mapped[bool] = mapped_column(server_default="false")
     # SHA-256 of the access code in hexadecimal; the code itself is only shown to the store once.
     access_code_hash: Mapped[str | None] = mapped_column(String(64))
     access_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

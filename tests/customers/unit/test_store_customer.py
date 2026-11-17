@@ -68,3 +68,25 @@ def test_linking_spends_the_code_and_unlinking_hides_the_account_again():
     assert (account.is_portal_linked, account.accepts("hash", NOW)) == (True, False)
     account.unlink_portal()
     assert not account.is_portal_linked
+
+
+def test_linking_trusts_the_store_and_unlinking_keeps_the_trust():
+    account = StoreCustomer(1, 2, Money(Decimal("1500")), conditions("40"))
+    assert not account.portal_trusted
+
+    account.link_portal(NOW)
+    account.unlink_portal()
+
+    assert (account.is_portal_linked, account.portal_trusted) == (False, True)
+
+
+def test_support_trusts_a_store_without_linking_it_and_distrusting_also_unlinks():
+    trusted = StoreCustomer(1, 2, Money(Decimal("1500")), conditions("40"))
+    distrusted = StoreCustomer(3, 2, Money(Decimal("1500")), conditions("40"))
+    distrusted.link_portal(NOW)
+
+    trusted.trust_portal()
+    distrusted.distrust_portal()
+
+    assert (trusted.portal_trusted, trusted.is_portal_linked) == (True, False)
+    assert (distrusted.portal_trusted, distrusted.is_portal_linked) == (False, False)

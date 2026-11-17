@@ -12,6 +12,7 @@ from app.customers.domain.services.access_code import (
     generate_access_code,
     hash_access_code,
     redeemed_account,
+    restoring_account,
 )
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import CreditConditions, Money, Rate
@@ -63,3 +64,39 @@ def test_a_code_of_no_account_is_refused(code):
         "code",
         422,
     )
+
+
+def accounts_with_code_at_second(*, first_trusted: bool, second_trusted: bool) -> list:
+    first, second = account_of_store(1), account_of_store(2)
+    first.portal_trusted, second.portal_trusted = first_trusted, second_trusted
+    second.issue_access_code(hash_access_code("BBBBBBBBBB"), NOW)
+    return [first, second]
+
+
+@pytest.mark.parametrize(
+    ("first_trusted", "second_trusted"),
+    [(False, False), (True, True), (False, True)],
+    ids=["first activation", "trusted store", "only the store of the code is trusted"],
+)
+def test_a_code_restores_the_access_when_its_store_is_trusted_or_nobody_is(
+    first_trusted, second_trusted
+):
+    accounts = accounts_with_code_at_second(
+        first_trusted=first_trusted, second_trusted=second_trusted
+    )
+
+    assert restoring_account(accounts, "BBBBBBBBBB", NOW) is accounts[1]
+
+
+def test_a_store_the_person_does_not_trust_cannot_restore_their_access():
+    accounts = accounts_with_code_at_second(first_trusted=True, second_trusted=False)
+
+    with pytest.raises(BusinessError) as error:
+        restoring_account(accounts, "BBBBBBBBBB", NOW)
+
+    assert (error.value.code, error.value.field, error.value.status) == (
+        "STORE_NOT_TRUSTED",
+        "code",
+        403,
+    )
+    assert accounts[1].accepts(hash_access_code("BBBBBBBBBB"), NOW)

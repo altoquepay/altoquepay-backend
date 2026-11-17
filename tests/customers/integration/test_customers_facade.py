@@ -115,6 +115,8 @@ async def test_redeeming_a_code_links_its_store_and_unlinks_the_others(facade, u
     await add_customer(unit_of_work, dni="70000002")
     new_account = await add_account(unit_of_work, store.id, customer.id, portal_linked=False)
     await add_account(unit_of_work, other_store.id, customer.id)
+    # Trusted, as an account the customer linked before another store restored their access.
+    new_account.trust_portal()
     new_account.issue_access_code(hash_access_code("K7QHM2XWPB"), now)
     await StoreCustomerRepositoryImpl(unit_of_work.session).update(new_account)
 
@@ -133,6 +135,29 @@ async def test_redeeming_a_code_links_its_store_and_unlinks_the_others(facade, u
         "INVALID_ACCESS_CODE",
         "INVALID_ACCESS_CODE",
     )
+
+
+async def test_a_store_the_person_does_not_trust_keeps_its_code_unspent(facade, unit_of_work):
+    now = datetime.now(UTC)
+    store = await add_store(unit_of_work)
+    other_store = await add_store(unit_of_work, ruc="20999999991")
+    customer = await add_customer(unit_of_work)
+    await add_account(unit_of_work, store.id, customer.id)
+    untrusted = await add_account(unit_of_work, other_store.id, customer.id, portal_linked=False)
+    untrusted.issue_access_code(hash_access_code("K7QHM2XWPB"), now)
+    await StoreCustomerRepositoryImpl(unit_of_work.session).update(untrusted)
+
+    with pytest.raises(BusinessError) as error:
+        await facade.redeem_access_code("70000001", "K7QHM2XWPB", now)
+    # A spent code would now answer INVALID_ACCESS_CODE instead.
+    with pytest.raises(BusinessError) as again:
+        await facade.redeem_access_code("70000001", "K7QHM2XWPB", now)
+
+    assert (error.value.code, error.value.status) == ("STORE_NOT_TRUSTED", 403)
+    assert again.value.code == "STORE_NOT_TRUSTED"
+    assert [
+        account.portal_linked for account in await facade.get_accounts_of_person(customer.id)
+    ] == [True, False]
 
 
 async def test_customer_of_a_user(facade, unit_of_work):

@@ -7,6 +7,7 @@ from app.customers.application.ports.store_defaults import StoreDefaults
 from app.customers.application.query_services.account_query_service import (
     AccountQueryService,
     CustomerAccount,
+    account_not_found,
 )
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.model.aggregates.store_customer import StoreCustomer
@@ -20,7 +21,7 @@ from app.customers.domain.services.access_code import (
     redeemed_account,
 )
 from app.shared.domain.errors import BusinessError
-from app.shared.domain.value_objects import CreditConditions, Rate
+from app.shared.domain.value_objects import CreditConditions, Dni, Rate
 from app.shared.infrastructure.unit_of_work import UnitOfWork
 
 
@@ -134,6 +135,25 @@ class AccountCommandService:
         account = redeemed_account(accounts, code, now)
         account.link_portal(now)
         await self._accounts.update(account)
+        await self._unit_of_work.commit()
+
+    async def trust_store(self, dni: Dni, store_id: int) -> None:
+        """Let only this store restore the person's access, as support decided with them.
+
+        Their other accounts leave the portal and can no longer restore it. Raises NOT_FOUND
+        (404) if the person has no account in the store.
+        """
+        person = await self._customers.find_by_dni(dni)
+        accounts = await self._accounts.list_by_customer(person.id) if person and person.id else []
+        chosen = next((account for account in accounts if account.store_id == store_id), None)
+        if chosen is None:
+            raise account_not_found()
+        for account in accounts:
+            if account is chosen:
+                account.trust_portal()
+            else:
+                account.distrust_portal()
+            await self._accounts.update(account)
         await self._unit_of_work.commit()
 
     async def _conditions_with_defaults(self, command: OpenAccountCommand) -> CreditConditions:

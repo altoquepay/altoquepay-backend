@@ -20,6 +20,7 @@ from app.customers.interfaces.rest.resources.customer_resources import (
     OpenAccountResource,
     OpenedAccountResource,
     PersonLookupResource,
+    TrustStoreResource,
     UpdateAccountResource,
 )
 from app.customers.interfaces.rest.transform.customer_transform import (
@@ -30,17 +31,23 @@ from app.customers.interfaces.rest.transform.customer_transform import (
     to_resource,
     to_update_command,
 )
-from app.shared.domain.value_objects import Dni
+from app.shared.domain.value_objects import Dni, Role
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
 from app.shared.interfaces.rest.pagination import Page, PageParams
-from app.shared.interfaces.rest.security import CurrentUser, get_customer, get_store_id
+from app.shared.interfaces.rest.security import (
+    CurrentUser,
+    get_customer,
+    get_store_id,
+    require_role,
+)
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
-# Outside /customers: the customer signs in to their own portal, which lives under /me.
+# Outside /customers: the customer's own portal lives under /me, and support under /admin.
 portal_router = APIRouter(tags=["Customers"])
 
 StoreId = Annotated[int, Depends(get_store_id)]
 Customer = Annotated[CurrentUser, Depends(get_customer)]
+SystemAdmin = Annotated[CurrentUser, Depends(require_role(Role.SYSTEM_ADMIN))]
 Today = Annotated[date, Depends(get_business_today)]
 Now = Annotated[datetime, Depends(get_business_now)]
 QueryService = Annotated[AccountQueryService, Depends(get_account_query_service)]
@@ -149,3 +156,15 @@ async def link_my_store(
 ) -> None:
     """Add a store to the signed-in customer's portal with the access code it handed them."""
     await command_service.link_with_code(int(customer.user_id), resource.code, now)
+
+
+@portal_router.post("/admin/customers/trusted-store", status_code=204)
+async def trust_store(
+    resource: TrustStoreResource, _admin: SystemAdmin, command_service: CommandService
+) -> None:
+    """Let only this store restore the customer's access, once support confirmed it with them.
+
+    For a customer locked out by a store they do not trust. Their other stores leave the portal
+    and can no longer restore it; the customer links them again with a new code.
+    """
+    await command_service.trust_store(Dni(resource.dni.strip()), resource.store_id)

@@ -33,6 +33,16 @@ def invalid_access_code() -> BusinessError:
     )
 
 
+def store_not_trusted() -> BusinessError:
+    return BusinessError(
+        "STORE_NOT_TRUSTED",
+        "This store cannot restore your access. Ask for the code at a store you already see "
+        "in your portal, or contact AlToque Pay support.",
+        field="code",
+        status=403,
+    )
+
+
 def redeemed_account(accounts: list[StoreCustomer], code: str, now: datetime) -> StoreCustomer:
     """Return the account, among those of one person, whose store issued the code."""
     code_hash = hash_access_code(code)
@@ -40,3 +50,14 @@ def redeemed_account(accounts: list[StoreCustomer], code: str, now: datetime) ->
         if account.accepts(code_hash, now):
             return account
     raise invalid_access_code()
+
+
+def restoring_account(accounts: list[StoreCustomer], code: str, now: datetime) -> StoreCustomer:
+    """Return the account whose code sets the person's password without a session.
+
+    Any store activates a person who trusts none yet; after that, only a trusted store may.
+    """
+    account = redeemed_account(accounts, code, now)
+    if not account.portal_trusted and any(other.portal_trusted for other in accounts):
+        raise store_not_trusted()
+    return account

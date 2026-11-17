@@ -82,6 +82,13 @@ class LinkStoreResource(BaseModel):
     code: str = Field(max_length=20, examples=["K7QHM2XWPB"])
 
 
+class TrustStoreResource(BaseModel):
+    """The DNI goes in the body, so it stays out of the access logs."""
+
+    dni: str = Field(max_length=8, examples=["45678912"])
+    store_id: int
+
+
 class PersonLookupResource(BaseModel):
     """account_id is the person's account in this store, if any.
 

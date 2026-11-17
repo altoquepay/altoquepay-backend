@@ -13,6 +13,7 @@ from app.main import app as application
 from app.shared.infrastructure.database import session_factory
 from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
 from app.shared.interfaces.rest.business_date import get_business_now, get_business_today
+from tests.authorization import authorization
 
 PASSWORD = "mi-clave-segura"
 NEW_CUSTOMER = {
@@ -291,6 +292,55 @@ async def test_a_code_redeemed_without_a_session_leaves_only_its_store_linked(
     assert (old_session.status_code, old_session_link.status_code) == (401, 401)
     assert (await sign_in(client)).status_code == 401
     assert (new_sign_in.status_code, new_session.status_code) == (200, 200)
+
+
+async def test_a_store_that_opens_an_account_for_an_active_customer_cannot_take_over(
+    client, admin, other_admin
+):
+    first = (await open_account(client, admin)).json()
+    await redeem(client, first["access_code"]["code"])
+    # Another store opens an account for the same DNI without the customer and redeems its code.
+    second = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+
+    taken = await redeem(client, second["access_code"]["code"], password="clave-de-la-tienda")
+
+    assert (taken.status_code, taken.json()["code"]) == (403, "STORE_NOT_TRUSTED")
+    assert (await sign_in(client)).status_code == 200
+    assert (await sign_in(client, password="clave-de-la-tienda")).status_code == 401
+
+
+async def test_support_chooses_the_only_store_that_may_restore_the_access(
+    client, admin, other_admin
+):
+    # A store activated the customer's DNI before them; the customer's own store is refused.
+    first = (await open_account(client, admin)).json()
+    await redeem(client, first["access_code"]["code"], password="clave-de-la-tienda")
+    own = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+    refused = await redeem(client, own["access_code"]["code"])
+    own_store_id = (await client.get("/api/v1/store/profile", headers=other_admin)).json()["id"]
+    support = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+
+    def trust(store_id: int, headers: dict[str, str]):
+        return client.post(
+            "/api/v1/admin/customers/trusted-store",
+            json={"dni": "45678912", "store_id": store_id},
+            headers=headers,
+        )
+
+    as_store = await trust(own_store_id, admin)
+    without_account = await trust(999_999, support)
+    trusted = await trust(own_store_id, support)
+    restored = await redeem(client, own["access_code"]["code"])
+    first_path = f"/api/v1/customers/{first['account']['id']}"
+    new_code = (await client.post(f"{first_path}/access-code", headers=admin)).json()["code"]
+    taken_again = await redeem(client, new_code, password="clave-de-la-tienda")
+
+    assert refused.json()["code"] == "STORE_NOT_TRUSTED"
+    assert (as_store.status_code, without_account.status_code) == (403, 404)
+    assert (trusted.status_code, restored.status_code) == (204, 204)
+    assert (await client.get(first_path, headers=admin)).json()["portal_linked"] is False
+    assert (taken_again.status_code, taken_again.json()["code"]) == (403, "STORE_NOT_TRUSTED")
+    assert (await sign_in(client)).status_code == 200
 
 
 async def test_only_the_customer_of_the_code_adds_the_store(client, admin):

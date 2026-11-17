@@ -22,7 +22,9 @@ class StoreCustomer:
     """An inactive account keeps its history, but the customer can no longer buy on credit.
 
     The customer sees the account in their portal only once it is linked, which takes the
-    access code this store hands them, so no other store can link it or see it.
+    access code this store hands them, so no other store can link it or see it. A linked
+    account stays trusted after it leaves the portal: only a trusted store may restore the
+    customer's access, so a store cannot open an account for someone's DNI and take it over.
     """
 
     store_id: int
@@ -32,6 +34,7 @@ class StoreCustomer:
     status: AccountStatus = AccountStatus.ACTIVE
     created_at: datetime | None = None
     portal_linked_at: datetime | None = None
+    portal_trusted: bool = False
     access_code_hash: str | None = None
     access_code_expires_at: datetime | None = None
     id: int | None = None
@@ -66,11 +69,21 @@ class StoreCustomer:
         )
 
     def link_portal(self, now: datetime) -> None:
-        """Show the account in the customer's portal. The code that allowed it is spent."""
+        """Show the account in the customer's portal and trust its store. The code is spent."""
         self.portal_linked_at = now
+        self.portal_trusted = True
         self.access_code_hash = None
         self.access_code_expires_at = None
 
     def unlink_portal(self) -> None:
         """Hide the account from the portal until the customer redeems a new code of this store."""
         self.portal_linked_at = None
+
+    def trust_portal(self) -> None:
+        """Let this store restore the customer's access, as support decided."""
+        self.portal_trusted = True
+
+    def distrust_portal(self) -> None:
+        """Take the account out of the portal and stop its store from restoring the access."""
+        self.portal_trusted = False
+        self.unlink_portal()
