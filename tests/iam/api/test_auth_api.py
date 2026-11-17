@@ -86,7 +86,7 @@ async def customer_id(unit_of_work) -> int:
     assert user is not None and user.id is not None
     user.change_password(await Argon2PasswordHasher().hash(CUSTOMER_PASSWORD))
     await users.update(user)
-    customer = Customer(Dni(CUSTOMER_DNI), "Rosa", "Quispe", user.id)
+    customer = Customer(Dni(CUSTOMER_DNI), user.id)
     await CustomerRepositoryImpl(unit_of_work.session).add(customer)
     assert customer.id is not None
     return customer.id

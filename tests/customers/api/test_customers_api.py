@@ -217,8 +217,8 @@ async def test_repeated_dni_in_the_same_store_is_rejected(client, admin):
     )
 
 
-async def test_new_dni_needs_the_names(client, admin):
-    response = await open_account(client, admin, first_names=None)
+async def test_an_account_needs_the_names(client, admin):
+    response = await open_account(client, admin, first_names="  ")
 
     assert response.status_code == 422
     assert (response.json()["code"], response.json()["field"]) == ("INVALID_NAME", "first_names")
@@ -230,20 +230,23 @@ async def test_person_from_another_store_keeps_their_user_and_gets_a_code(
     first = await open_account(client, admin)
 
     lookup = await client.get("/api/v1/customers/lookup?dni=45678912", headers=other_admin)
-    second = await open_account(client, other_admin, first_names=None, last_names=None)
+    without_names = await open_account(client, other_admin, first_names=None, last_names=None)
+    second = await open_account(client, other_admin, first_names="Rosa María", phone=None)
 
     assert lookup.status_code == 200
+    # Nothing the first store typed about the person reaches the second one.
     assert lookup.json() | {"customer_id": 0} == {
         "customer_id": 0,
         "dni": "45678912",
-        "first_names": "Rosa",
-        "last_names": "Quispe Mamani",
-        "phone": "987654321",
-        "address": None,
         "account_id": None,
         "notice": "PERSON_HAS_ACCOUNT",
     }
+    assert (without_names.status_code, without_names.json()["field"]) == (422, "first_names")
     assert second.status_code == 201
+    assert (second.json()["account"]["first_names"], second.json()["account"]["phone"]) == (
+        "Rosa María",
+        None,
+    )
     assert second.json()["access_code"]["code"] != first.json()["access_code"]["code"]
     assert second.json()["account"]["portal_linked"] is False
     assert second.json()["account"]["customer_id"] == first.json()["account"]["customer_id"]
@@ -254,7 +257,7 @@ async def test_a_code_redeemed_without_a_session_leaves_only_its_store_linked(
 ):
     first = (await open_account(client, admin)).json()
     await redeem(client, first["access_code"]["code"])
-    second = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+    second = (await open_account(client, other_admin)).json()
     second_path = f"/api/v1/customers/{second['account']['id']}"
 
     async def linked() -> tuple[bool, bool]:
@@ -300,7 +303,7 @@ async def test_a_store_that_opens_an_account_for_an_active_customer_cannot_take_
     first = (await open_account(client, admin)).json()
     await redeem(client, first["access_code"]["code"])
     # Another store opens an account for the same DNI without the customer and redeems its code.
-    second = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+    second = (await open_account(client, other_admin)).json()
 
     taken = await redeem(client, second["access_code"]["code"], password="clave-de-la-tienda")
 
@@ -315,7 +318,7 @@ async def test_support_chooses_the_only_store_that_may_restore_the_access(
     # A store activated the customer's DNI before them; the customer's own store is refused.
     first = (await open_account(client, admin)).json()
     await redeem(client, first["access_code"]["code"], password="clave-de-la-tienda")
-    own = (await open_account(client, other_admin, first_names=None, last_names=None)).json()
+    own = (await open_account(client, other_admin)).json()
     refused = await redeem(client, own["access_code"]["code"])
     own_store_id = (await client.get("/api/v1/store/profile", headers=other_admin)).json()["id"]
     support = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
@@ -428,6 +431,39 @@ async def test_update_replaces_data_and_terms(client, admin):
     assert stored.json() == response.json()
     assert (stored.json()["first_names"], stored.json()["phone"]) == ("Rosa María", None)
     assert (stored.json()["credit_limit"], stored.json()["tea"]) == ("2000.00", "75.0000000")
+
+
+async def test_what_a_store_edits_never_changes_the_account_of_another_store(
+    client, admin, other_admin
+):
+    first = (await open_account(client, admin, address="Jr. Las Flores 123")).json()["account"]
+    second = (await open_account(client, other_admin)).json()["account"]
+    changes = {
+        "first_names": "Otro",
+        "last_names": "Nombre",
+        "phone": "900000000",
+        "address": "Otra dirección",
+        "credit_limit": "1",
+        "cutoff_day": 10,
+        "payment_day": 15,
+        "tea": "40",
+        "late_tea": "15",
+        "max_weeks": 4,
+    }
+
+    changed = await client.put(
+        f"/api/v1/customers/{second['id']}", json=changes, headers=other_admin
+    )
+    seen_by_first = (await client.get(f"/api/v1/customers/{first['id']}", headers=admin)).json()
+
+    assert changed.status_code == 200
+    person_fields = ("first_names", "last_names", "phone", "address")
+    assert [seen_by_first[field] for field in person_fields] == [
+        "Rosa",
+        "Quispe Mamani",
+        "987654321",
+        "Jr. Las Flores 123",
+    ]
 
 
 async def test_deactivated_account_stays_listed_as_inactive(client, admin):

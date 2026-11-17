@@ -80,10 +80,10 @@ async def lookup_customer(
     query_service: QueryService,
     dni: Annotated[str, Query(max_length=8)],
 ) -> PersonLookupResource:
-    """Find a person by DNI before opening their account, to fill in the form.
+    """Find a person by DNI before opening their account, without what other stores typed.
 
-    404 if nobody has the DNI yet. notice is PERSON_HAS_ACCOUNT, not an error, when the person
-    already buys in another store.
+    404 if nobody has the DNI yet. account_id is set when the store already has their account.
+    notice is PERSON_HAS_ACCOUNT, not an error, when the person already buys in another store.
     """
     return to_lookup_resource(await query_service.lookup(store_id, Dni(dni.strip())))
 
