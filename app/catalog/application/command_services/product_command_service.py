@@ -50,9 +50,9 @@ class ProductCommandService:
         previous_url = product.image_url
         product.change_image(await self._images.save(name, content))
         await self._products.update(product)
-        await self._unit_of_work.commit()
         if previous_url is not None:
             await self._images.delete(previous_url)
+        await self._unit_of_work.commit()
         return product
 
     async def _ensure_code_free(

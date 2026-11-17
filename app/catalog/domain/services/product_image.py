@@ -10,6 +10,9 @@ SIGNATURES = [
     (b"\x89PNG\r\n\x1a\n", "png"),
 ]
 
+# The media type each extension is served with.
+CONTENT_TYPES = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
 
 def image_extension(content: bytes) -> str:
     """Return the extension of a valid image, or raise if it is too large or not an image."""

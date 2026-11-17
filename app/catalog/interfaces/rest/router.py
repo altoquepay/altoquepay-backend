@@ -1,14 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, Query, Response, UploadFile
 
 from app.catalog.application.command_services.product_command_service import (
     ProductCommandService,
 )
+from app.catalog.application.ports.image_storage import ImageStorage
 from app.catalog.application.query_services.product_query_service import ProductQueryService
 from app.catalog.domain.repositories.product_repository import ProductFilter
-from app.catalog.domain.services.product_image import MAXIMUM_IMAGE_BYTES
+from app.catalog.domain.services.product_image import CONTENT_TYPES, MAXIMUM_IMAGE_BYTES
 from app.catalog.interfaces.rest.dependencies import (
+    get_image_storage,
     get_product_command_service,
     get_product_query_service,
 )
@@ -17,14 +19,18 @@ from app.catalog.interfaces.rest.resources.product_resources import (
     ProductResource,
 )
 from app.catalog.interfaces.rest.transform.product_transform import to_details, to_resource
+from app.shared.domain.errors import BusinessError
 from app.shared.interfaces.rest.pagination import Page, PageParams
 from app.shared.interfaces.rest.security import get_store_id
 
 router = APIRouter(prefix="/products", tags=["Products"])
+# Outside /api/v1: the URLs saved in image_url start with /media.
+media_router = APIRouter(prefix="/media/products", tags=["Products"])
 
 StoreId = Annotated[int, Depends(get_store_id)]
 QueryService = Annotated[ProductQueryService, Depends(get_product_query_service)]
 CommandService = Annotated[ProductCommandService, Depends(get_product_command_service)]
+Images = Annotated[ImageStorage, Depends(get_image_storage)]
 
 
 @router.get("")
@@ -93,3 +99,19 @@ async def upload_product_image(
     # One byte over the limit is enough to know the file is too large.
     content = await image.read(MAXIMUM_IMAGE_BYTES + 1)
     return to_resource(await command_service.change_image(store_id, product_id, content))
+
+
+@media_router.get("/{name:path}")
+async def get_product_image(name: str, images: Images) -> Response:
+    """Return an uploaded product image, with no sign-in, so the frontend can show it.
+
+    Every upload gets a new name, so browsers may keep an image for a year.
+    """
+    content = await images.load(name)
+    if content is None:
+        raise BusinessError("NOT_FOUND", "The image does not exist.", status=404)
+    return Response(
+        content,
+        media_type=CONTENT_TYPES[name.rsplit(".", 1)[-1]],
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )

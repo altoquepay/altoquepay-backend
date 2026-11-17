@@ -1,14 +1,14 @@
 """Tests for the products endpoints against the migrated PostgreSQL database.
 
-Every test shares one Unit of Work that never commits, and images go to a temporary folder.
+Every test shares one Unit of Work that never commits, images included.
 """
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
-from app.catalog.infrastructure.storage.local_image_storage import LocalImageStorage
+from app.catalog.infrastructure.persistence.models import ProductImageModel
 from app.catalog.interfaces.acl.catalog_facade import CatalogFacade
-from app.catalog.interfaces.rest.dependencies import get_image_storage
 from app.main import app as application
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.database import session_factory
@@ -39,9 +39,8 @@ async def unit_of_work():
 
 
 @pytest.fixture
-async def client(unit_of_work, tmp_path):
+async def client(unit_of_work):
     application.dependency_overrides[get_unit_of_work] = lambda: unit_of_work
-    application.dependency_overrides[get_image_storage] = lambda: LocalImageStorage(tmp_path)
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -152,24 +151,39 @@ async def test_deactivated_product_cannot_be_sold(client, admin, unit_of_work):
     assert error.value.code == "PRODUCT_NOT_AVAILABLE"
 
 
+async def saved_images(unit_of_work, product_id: int) -> list[str]:
+    """Return the names of the stored images of a product."""
+    names = await unit_of_work.session.scalars(
+        select(ProductImageModel.name).where(ProductImageModel.name.like(f"%/{product_id}-%"))
+    )
+    return list(names)
+
+
 async def store_of(client, headers) -> int:
     return (await client.get("/api/v1/store/profile", headers=headers)).json()["id"]
 
 
-async def test_uploaded_image_is_saved_and_replaces_the_previous_one(client, admin, tmp_path):
+async def test_uploaded_image_is_served_and_replaces_the_previous_one(client, admin, unit_of_work):
     rice = (await create(client, admin)).json()
     url = f"/api/v1/products/{rice['id']}/image"
 
     first = await client.post(url, files={"image": ("arroz.png", PNG, "image/png")}, headers=admin)
     second = await client.post(url, files={"image": ("arroz.png", PNG, "image/png")}, headers=admin)
-
     first_url, second_url = first.json()["image_url"], second.json()["image_url"]
+    # No sign-in: the browser loads it from an <img> tag.
+    served = await client.get(second_url)
+    replaced = await client.get(first_url)
+
     assert second.status_code == 200
     assert second_url.startswith("/media/products/") and second_url.endswith(".png")
     assert second_url != first_url
-    saved = list((tmp_path / "products").rglob("*.png"))
-    assert [path.name for path in saved] == [second_url.rsplit("/", 1)[1]]
-    assert saved[0].read_bytes() == PNG
+    assert (served.status_code, served.content) == (200, PNG)
+    assert served.headers["content-type"] == "image/png"
+    assert served.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert (replaced.status_code, replaced.json()["code"]) == (404, "NOT_FOUND")
+    assert await saved_images(unit_of_work, rice["id"]) == [
+        second_url.removeprefix("/media/products/")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -180,7 +194,7 @@ async def test_uploaded_image_is_saved_and_replaces_the_previous_one(client, adm
     ],
     ids=["not an image", "over 2 MB"],
 )
-async def test_invalid_image_is_rejected_and_not_saved(client, admin, tmp_path, content, code):
+async def test_invalid_image_is_rejected_and_not_saved(client, admin, unit_of_work, content, code):
     rice = (await create(client, admin)).json()
 
     response = await client.post(
@@ -191,7 +205,7 @@ async def test_invalid_image_is_rejected_and_not_saved(client, admin, tmp_path, 
 
     assert response.status_code == 422
     assert (response.json()["code"], response.json()["field"]) == (code, "image")
-    assert not (tmp_path / "products").exists()
+    assert await saved_images(unit_of_work, rice["id"]) == []
 
 
 @pytest.mark.parametrize(
@@ -210,7 +224,9 @@ async def test_product_of_another_store_is_not_found(
     assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
 
 
-async def test_image_of_another_store_product_is_not_found(client, admin, other_admin, tmp_path):
+async def test_image_of_another_store_product_is_not_found(
+    client, admin, other_admin, unit_of_work
+):
     rice = (await create(client, admin)).json()
 
     response = await client.post(
@@ -220,4 +236,10 @@ async def test_image_of_another_store_product_is_not_found(client, admin, other_
     )
 
     assert response.status_code == 404
-    assert not (tmp_path / "products").exists()
+    assert await saved_images(unit_of_work, rice["id"]) == []
+
+
+async def test_unknown_image_is_not_found(client):
+    response = await client.get("/media/products/1/1-0000000000000000.png")
+
+    assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")

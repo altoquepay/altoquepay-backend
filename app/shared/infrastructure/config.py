@@ -27,8 +27,6 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     frontend_url: str = "http://localhost:4200"
-    # Folder for uploaded files such as product images, served under /media.
-    media_dir: str = "media"
 
     @property
     def cors_origins_list(self) -> list[str]:

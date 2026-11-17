@@ -9,3 +9,7 @@ class ImageStorage(ABC):
     @abstractmethod
     async def delete(self, url: str) -> None:
         """Remove an image saved here. Do nothing for other URLs or missing files."""
+
+    @abstractmethod
+    async def load(self, name: str) -> bytes | None:
+        """Return the image saved under that name, or None if there is none."""
