@@ -28,7 +28,8 @@ class BillingCycleService:
 
         A cycle whose cutoff day ended before today is closed even if no read closed it yet,
         so a purchase dated in it is refused. Credit locks the account first, so two purchases
-        cannot create the same cycle twice.
+        cannot create the same cycle twice. The cycle is locked too, so a read closing it at
+        midnight either waits for the purchase or makes it see the cycle closed.
         """
         if purchased_at.tzinfo is None:
             raise ValueError("purchased_at must have a time zone.")
@@ -38,7 +39,7 @@ class BillingCycleService:
         period = cycle_period_of(purchase_day, account.cutoff_day, account.payment_day)
         if period.cutoff_date < today:
             raise cycle_closed(period)
-        cycle = await self._cycles.find(account_id, period.year, period.month)
+        cycle = await self._cycles.find(account_id, period.year, period.month, for_update=True)
         if cycle is None:
             cycle = BillingCycle.open(account_id, account.store_id, period)
             await self._cycles.add(cycle)
