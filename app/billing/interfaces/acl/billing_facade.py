@@ -68,7 +68,10 @@ class PaymentSummary:
 
 
 class BillingFacade:
-    """Never commits: the use case of the calling context does, once all its work succeeded."""
+    """Never commits, except the closing of due cycles its reads do, which is final.
+
+    The use case of the calling context commits its own work, once all of it succeeded.
+    """
 
     def __init__(self, unit_of_work: UnitOfWork) -> None:
         cycles = BillingCycleRepositoryImpl(unit_of_work.session)
@@ -80,15 +83,19 @@ class BillingFacade:
             cycles,
             PaymentRepositoryImpl(unit_of_work.session),
             ExternalCredit(CreditFacade(unit_of_work)),
+            unit_of_work,
         )
 
-    async def get_or_open_cycle(self, account_id: int, purchased_at: datetime) -> CycleReference:
+    async def get_or_open_cycle(
+        self, account_id: int, purchased_at: datetime, today: date
+    ) -> CycleReference:
         """Return the cycle of a purchase by its cutoff date in Lima, creating it if needed.
 
-        purchased_at must have a time zone. It flushes but does not commit. Raises NOT_FOUND
-        (404) if the account does not exist and CYCLE_CLOSED (409) if the cycle is not open.
+        purchased_at must have a time zone; today is the business day of the registration.
+        It flushes but does not commit. Raises NOT_FOUND (404) if the account does not exist
+        and CYCLE_CLOSED (409) if the cycle is not open or its cutoff ended before today.
         """
-        cycle = await self._cycles.get_or_open(account_id, purchased_at)
+        cycle = await self._cycles.get_or_open(account_id, purchased_at, today)
         if cycle.id is None:
             raise ValueError("The cycle was not stored.")
         return CycleReference(

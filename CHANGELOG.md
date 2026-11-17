@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-17
+
+### Fixed
+- **Billing**: a purchase dated in a cycle whose cutoff day already ended is refused with `CYCLE_CLOSED`. Before, it was added to a statement the customer had already seen, or it opened a past cycle that was overdue from the start and charged late interest at once.
+- **Billing**: the cycles a read closes after their cutoff are saved. Before, every dashboard, cycle list and statement closed them again, one query per cycle, and they stayed `OPEN` in the database until a payment of that account.
+
 ## [0.4.0] - 2026-11-16
 
 ### Added

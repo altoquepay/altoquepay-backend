@@ -60,7 +60,8 @@ class BillingCycleRepositoryImpl(BillingCycleRepository):
             query = query.where(BillingCycleModel.store_id == store_id)
         if account_id is not None:
             query = query.where(BillingCycleModel.store_customer_id == account_id)
-        models = await self._session.scalars(query.order_by(BillingCycleModel.id))
+        # Locked in id order, so a payment cannot pay a cycle that this read is closing.
+        models = await self._session.scalars(query.order_by(BillingCycleModel.id).with_for_update())
         return [to_domain(model) for model in models]
 
     async def list_closed_by_payment_date(

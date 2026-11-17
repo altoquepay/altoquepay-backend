@@ -22,6 +22,7 @@ from app.billing.domain.repositories.payment_repository import PaymentFilter, Pa
 from app.billing.domain.services.payment_calculations import ZERO
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Money
+from app.shared.infrastructure.unit_of_work import UnitOfWork
 
 
 @dataclass(frozen=True)
@@ -42,24 +43,41 @@ class Statement:
 
 
 class BillingQueryService:
-    """Closes the cycles whose cutoff ended before reading them. It never commits."""
+    """Closes the cycles whose cutoff ended before reading them.
+
+    Commits only the closing of due cycles, which is final whatever the caller does next, so
+    the next read does not close them again.
+    """
 
     def __init__(
         self,
         cycles: BillingCycleRepository,
         payments: PaymentRepository,
         ledger: CreditLedger,
+        unit_of_work: UnitOfWork,
     ) -> None:
         self._cycles = cycles
         self._payments = payments
         self._ledger = ledger
+        self._unit_of_work = unit_of_work
         self._closing = CycleClosingService(cycles, ledger)
+
+    async def _close_due(
+        self,
+        today: date,
+        now: datetime,
+        *,
+        store_id: int | None = None,
+        account_id: int | None = None,
+    ) -> None:
+        if await self._closing.close_due(today, now, store_id=store_id, account_id=account_id):
+            await self._unit_of_work.commit()
 
     async def get_statement(
         self, account_id: int, year: int, month: int, today: date, now: datetime
     ) -> Statement | None:
         """Return the statement of a month, or None if the account has no cycle in it."""
-        await self._closing.close_due(today, now, account_id=account_id)
+        await self._close_due(today, now, account_id=account_id)
         cycle = await self._cycles.find(account_id, year, month)
         if cycle is None or cycle.id is None:
             return None
@@ -102,7 +120,7 @@ class BillingQueryService:
         offset: int,
         size: int,
     ) -> tuple[list[BillingCycle], int]:
-        await self._closing.close_due(today, now, store_id=store_id)
+        await self._close_due(today, now, store_id=store_id)
         return await self._cycles.list_page(store_id, cycle_filter, today, offset, size)
 
     async def list_payments(self, account_id: int) -> list[Payment]:
@@ -122,7 +140,7 @@ class BillingQueryService:
         self, store_id: int, from_date: date, to_date: date, today: date, now: datetime
     ) -> list[BillingCycle]:
         """Return the closed, unpaid cycles payable within the range, closing due ones first."""
-        await self._closing.close_due(today, now, store_id=store_id)
+        await self._close_due(today, now, store_id=store_id)
         return await self._cycles.list_closed_by_payment_date(store_id, from_date, to_date)
 
     async def next_cutoff(self, store_id: int, today: date) -> date | None:
