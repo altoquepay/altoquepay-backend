@@ -136,10 +136,11 @@ class CustomersFacade:
         # Support reads it to find which store restored an access the customer did not ask for;
         # a warning, so it shows even without a logging setup.
         logger.warning(
-            "Store %s restored the access of customer %s with account %s",
+            "Store %s restored the access of customer %s with account %s at %s",
             redeemed.store_id,
             person.id,
             redeemed.id,
+            now.isoformat(),
         )
         # shortcut: two requests redeeming the same code at the same time both pass; lock the
         # person's accounts first if a code ever has to be strictly single use.
