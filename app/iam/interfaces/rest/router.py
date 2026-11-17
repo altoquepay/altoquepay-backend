@@ -31,6 +31,7 @@ from app.iam.interfaces.rest.resources.auth_resources import (
     RedeemAccessCodeResource,
     ResetPasswordResource,
 )
+from app.iam.interfaces.rest.sign_in_attempts import limit_sign_in_attempts
 from app.shared.interfaces.rest.business_date import get_business_now
 from app.shared.interfaces.rest.security import CurrentUser, get_token_user
 
@@ -48,7 +49,7 @@ def to_access_token_resource(signed_in: SignedInUser) -> AccessTokenResource:
     )
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(limit_sign_in_attempts)])
 async def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     service: Annotated[AuthenticationService, Depends(get_authentication_service)],

@@ -17,6 +17,7 @@ from app.iam.infrastructure.persistence.user_repository_impl import UserReposito
 from app.iam.infrastructure.security.argon2_password_hasher import Argon2PasswordHasher
 from app.iam.interfaces.acl.iam_facade import IamFacade
 from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
+from app.iam.interfaces.rest.sign_in_attempts import MAXIMUM_ATTEMPTS
 from app.main import app as application
 from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.database import session_factory
@@ -128,6 +129,18 @@ async def test_wrong_password_is_rejected(client, store_admin_id):
 
     assert response.status_code == 401
     assert response.json()["code"] == "INVALID_CREDENTIALS"
+
+
+async def test_an_ip_that_used_all_its_attempts_cannot_sign_in_even_with_the_password(
+    client, store_admin_id
+):
+    for _ in range(MAXIMUM_ATTEMPTS):
+        wrong = await login(client, ADMIN_EMAIL, "otra-clave")
+
+    right = await login(client, ADMIN_EMAIL, ADMIN_PASSWORD)
+
+    assert wrong.status_code == 401
+    assert (right.status_code, right.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
 
 
 async def test_system_admin_is_blocked_until_changing_the_first_password(client, system_admin):
