@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from app.customers.application.ports.customer_users import CustomerUsers
 from app.customers.application.ports.rate_cap_checker import RateCapChecker
-from app.customers.application.ports.store_defaults import StoreDefaults
+from app.customers.application.ports.store_directory import StoreDirectory
 from app.customers.application.query_services.account_query_service import (
     AccountQueryService,
     CustomerAccount,
@@ -50,14 +50,14 @@ class AccountCommandService:
         self,
         customers: CustomerRepository,
         accounts: StoreCustomerRepository,
-        store_defaults: StoreDefaults,
+        stores: StoreDirectory,
         rate_caps: RateCapChecker,
         users: CustomerUsers,
         unit_of_work: UnitOfWork,
     ) -> None:
         self._customers = customers
         self._accounts = accounts
-        self._store_defaults = store_defaults
+        self._stores = stores
         self._rate_caps = rate_caps
         self._users = users
         self._unit_of_work = unit_of_work
@@ -157,7 +157,7 @@ class AccountCommandService:
         await self._unit_of_work.commit()
 
     async def _conditions_with_defaults(self, command: OpenAccountCommand) -> CreditConditions:
-        defaults = await self._store_defaults.get(command.store_id)
+        defaults = await self._stores.get(command.store_id)
         changes = {
             "cutoff_day": command.cutoff_day,
             "payment_day": command.payment_day,

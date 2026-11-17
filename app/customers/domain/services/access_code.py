@@ -43,6 +43,15 @@ def store_not_trusted() -> BusinessError:
     )
 
 
+def inactive_store() -> BusinessError:
+    return BusinessError(
+        "STORE_INACTIVE",
+        "The store that issued this code is no longer active.",
+        field="code",
+        status=403,
+    )
+
+
 def redeemed_account(accounts: list[StoreCustomer], code: str, now: datetime) -> StoreCustomer:
     """Return the account, among those of one person, whose store issued the code."""
     code_hash = hash_access_code(code)

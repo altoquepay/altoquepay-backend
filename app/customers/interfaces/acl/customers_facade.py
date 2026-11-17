@@ -11,7 +11,12 @@ from decimal import Decimal
 
 from app.customers.domain.model.aggregates.customer import Customer
 from app.customers.domain.model.aggregates.store_customer import StoreCustomer
-from app.customers.domain.services.access_code import invalid_access_code, restoring_account
+from app.customers.domain.services.access_code import (
+    inactive_store,
+    invalid_access_code,
+    restoring_account,
+)
+from app.customers.infrastructure.acl.external_stores import ExternalStores
 from app.customers.infrastructure.persistence.customer_repository_impl import (
     CustomerRepositoryImpl,
 )
@@ -21,6 +26,7 @@ from app.customers.infrastructure.persistence.store_customer_repository_impl imp
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.unit_of_work import UnitOfWork
+from app.stores.interfaces.acl.stores_facade import StoresFacade
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +73,7 @@ class CustomersFacade:
     def __init__(self, unit_of_work: UnitOfWork) -> None:
         self._accounts = StoreCustomerRepositoryImpl(unit_of_work.session)
         self._customers = CustomerRepositoryImpl(unit_of_work.session)
+        self._stores = ExternalStores(StoresFacade(unit_of_work))
 
     async def get_credit_terms(self, account_id: int) -> CreditTerms:
         """Return the conditions of an account. Callers compare its store_id with the token's.
@@ -115,14 +122,17 @@ class CustomersFacade:
         It is redeemed without a session, to choose a new password, so only that store vouches
         for who holds it: the person's accounts in other stores leave the portal until each of
         them hands over a new code. Raises INVALID_ACCESS_CODE (422) if the DNI and the code do
-        not match a code still in force, and STORE_NOT_TRUSTED (403) if the person already
-        trusts other stores but not this one.
+        not match a code still in force, STORE_NOT_TRUSTED (403) if the person already trusts
+        other stores but not this one, and STORE_INACTIVE (403) if the store was deactivated.
         """
         person = await self._customers.find_by_dni(Dni(dni.strip()))
         if person is None or person.id is None:
             raise invalid_access_code()
         accounts = await self._accounts.list_by_customer(person.id)
         redeemed = restoring_account(accounts, code, now)
+        # A deactivated store cannot issue codes; this stops the ones it issued before.
+        if not await self._stores.is_store_active(redeemed.store_id):
+            raise inactive_store()
         # Support reads it to find which store restored an access the customer did not ask for;
         # a warning, so it shows even without a logging setup.
         logger.warning(

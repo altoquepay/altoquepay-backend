@@ -343,6 +343,20 @@ async def test_support_chooses_the_only_store_that_may_restore_the_access(
     assert (await sign_in(client)).status_code == 200
 
 
+async def test_a_deactivated_store_cannot_use_the_codes_it_issued_before(client, admin):
+    opened = (await open_account(client, admin)).json()
+    store_id = (await client.get("/api/v1/store/profile", headers=admin)).json()["id"]
+    support = authorization(sub="1", role="SYSTEM_ADMIN", store_id=None)
+
+    await client.patch(f"/api/v1/admin/stores/{store_id}/deactivate", headers=support)
+    refused = await redeem(client, opened["access_code"]["code"])
+    await client.patch(f"/api/v1/admin/stores/{store_id}/reactivate", headers=support)
+    after_reactivating = await redeem(client, opened["access_code"]["code"])
+
+    assert (refused.status_code, refused.json()["code"]) == (403, "STORE_INACTIVE")
+    assert after_reactivating.status_code == 204
+
+
 async def test_only_the_customer_of_the_code_adds_the_store(client, admin):
     rosa = (await open_account(client, admin)).json()
     await redeem(client, rosa["access_code"]["code"])
