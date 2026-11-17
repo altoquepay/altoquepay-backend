@@ -3,6 +3,8 @@
 Every test shares one Unit of Work that never commits, images included.
 """
 
+from http import HTTPStatus
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -12,6 +14,7 @@ from app.catalog.interfaces.acl.catalog_facade import CatalogFacade
 from app.main import app as application
 from app.shared.domain.errors import BusinessError
 from app.shared.infrastructure.unit_of_work import get_unit_of_work
+from app.shared.interfaces.rest.body_size_limit import MAXIMUM_BODY_BYTES
 
 PASSWORD = "mi-clave-segura"
 RICE = {
@@ -194,6 +197,19 @@ async def test_invalid_image_is_rejected_and_not_saved(client, admin, unit_of_wo
     assert response.status_code == 422
     assert (response.json()["code"], response.json()["field"]) == (code, "image")
     assert await saved_images(unit_of_work, rice["id"]) == []
+
+
+async def test_body_over_3_mb_is_refused_before_it_is_read(client, admin):
+    rice = (await create(client, admin)).json()
+
+    response = await client.post(
+        f"/api/v1/products/{rice['id']}/image",
+        files={"image": ("foto.png", PNG + b"\x00" * MAXIMUM_BODY_BYTES, "image/png")},
+        headers=admin,
+    )
+
+    # The code is the status name, which Python 3.13 renamed to CONTENT_TOO_LARGE.
+    assert (response.status_code, response.json()["code"]) == (413, HTTPStatus(413).name)
 
 
 @pytest.mark.parametrize(
