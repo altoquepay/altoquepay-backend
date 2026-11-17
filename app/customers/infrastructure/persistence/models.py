@@ -42,6 +42,10 @@ class StoreCustomerModel(Base):
         CheckConstraint("payment_day > cutoff_day", name="payment_day_after_cutoff"),
         CheckConstraint("max_weeks BETWEEN 1 AND 99", name="max_weeks_range"),
         CheckConstraint("status IN ('ACTIVE', 'INACTIVE')", name="status_known"),
+        CheckConstraint(
+            "(access_code_hash IS NULL) = (access_code_expires_at IS NULL)",
+            name="access_code_with_expiry",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -57,3 +61,10 @@ class StoreCustomerModel(Base):
     max_weeks: Mapped[int]
     status: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set when the customer redeems the access code of this store; empty hides it from the portal.
+    portal_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set once the customer links it; then only a trusted store may restore their access.
+    portal_trusted: Mapped[bool] = mapped_column(server_default="false")
+    # SHA-256 of the access code in hexadecimal; the code itself is only shown to the store once.
+    access_code_hash: Mapped[str | None] = mapped_column(String(64))
+    access_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

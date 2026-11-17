@@ -29,13 +29,12 @@ from app.reporting.interfaces.rest.transform import (
     to_schedule,
     to_statement,
 )
-from app.shared.domain.value_objects import Role
 from app.shared.interfaces.rest.business_date import get_business_today
-from app.shared.interfaces.rest.security import CurrentUser, get_store_id, require_role
+from app.shared.interfaces.rest.security import CurrentUser, get_customer, get_store_id
 
 router = APIRouter(tags=["Reports"])
 
-Customer = Annotated[CurrentUser, Depends(require_role(Role.CUSTOMER))]
+Customer = Annotated[CurrentUser, Depends(get_customer)]
 StoreId = Annotated[int, Depends(get_store_id)]
 Today = Annotated[date, Depends(get_business_today)]
 Portal = Annotated[CustomerPortalService, Depends(get_customer_portal_service)]

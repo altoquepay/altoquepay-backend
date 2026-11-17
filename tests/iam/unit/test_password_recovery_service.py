@@ -1,4 +1,4 @@
-"""Tests for resetting a forgotten password through an emailed link."""
+"""Tests for resetting a forgotten password, by an emailed link or a store's access code."""
 
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
@@ -10,6 +10,7 @@ from app.iam.application.command_services.password_recovery_service import (
     hash_reset_token,
 )
 from app.iam.domain.model.aggregates.user import User
+from app.iam.domain.model.commands.redeem_access_code_command import RedeemAccessCodeCommand
 from app.iam.domain.model.commands.reset_forgotten_password_command import (
     ResetForgottenPasswordCommand,
 )
@@ -18,6 +19,7 @@ from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Dni
 from tests.iam.fakes import (
     CountingUnitOfWork,
+    FixedCustomers,
     InMemoryResetTokens,
     InMemoryUsers,
     PlainHasher,
@@ -30,12 +32,14 @@ class Context:
         self.users = InMemoryUsers()
         self.reset_tokens = InMemoryResetTokens()
         self.notifier = notifier or RecordingNotifier()
+        self.customers = FixedCustomers()
         self.unit_of_work = CountingUnitOfWork()
         self.service = PasswordRecoveryService(
             self.users,
             self.reset_tokens,
             PlainHasher(),
             self.notifier,
+            self.customers,
             self.unit_of_work,  # type: ignore[arg-type]
             token_minutes=30,
             frontend_url="https://app.altoquepay.pe/",
@@ -162,3 +166,28 @@ async def test_invalid_new_password_keeps_the_token_usable(context):
 
     assert (error.value.code, error.value.field) == ("INVALID_PASSWORD", "new_password")
     assert context.reset_tokens.stored[0].used_at is None
+
+
+async def test_customer_chooses_a_password_with_the_access_code_of_a_store(context):
+    customer = User.customer(Dni("01234567"), "hashed:nobody-knows-it")
+    await context.users.add(customer)
+
+    await context.service.reset_with_access_code(
+        RedeemAccessCodeCommand("01234567", "K7QHM2XWPB", "mi-clave-segura"), datetime.now(UTC)
+    )
+
+    assert context.users.stored[customer.id].password_hash == "hashed:mi-clave-segura"
+    assert context.customers.redeemed == [("01234567", "K7QHM2XWPB")]
+    assert context.unit_of_work.commits == 1
+
+
+async def test_invalid_new_password_does_not_spend_the_access_code(context):
+    await context.users.add(User.customer(Dni("01234567"), "hashed:nobody-knows-it"))
+
+    with pytest.raises(BusinessError) as error:
+        await context.service.reset_with_access_code(
+            RedeemAccessCodeCommand("01234567", "K7QHM2XWPB", "corta"), datetime.now(UTC)
+        )
+
+    assert (error.value.code, error.value.field) == ("INVALID_PASSWORD", "new_password")
+    assert (context.customers.redeemed, context.unit_of_work.commits) == ([], 0)

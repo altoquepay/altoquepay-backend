@@ -155,6 +155,25 @@ async def test_a_store_without_an_account_is_not_found(client, customer, unit_of
     assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
 
 
+async def test_a_store_not_linked_to_the_portal_stays_hidden(
+    client, customer, store_a, unit_of_work
+):
+    customer_id = (
+        await CustomersFacade(unit_of_work).get_credit_terms(store_a.account_id)
+    ).customer_id
+    just_opened = await add_store(unit_of_work, ruc="20999999992")
+    await add_account(unit_of_work, just_opened.id, customer_id, portal_linked=False)
+
+    stores = await client.get("/api/v1/me/stores", headers=customer)
+    summary = await client.get(f"/api/v1/me/stores/{just_opened.id}/summary", headers=customer)
+    purchases = await client.get(f"/api/v1/me/stores/{just_opened.id}/purchases", headers=customer)
+
+    assert len(stores.json()) == 2
+    assert just_opened.id not in [store["store_id"] for store in stores.json()]
+    assert (summary.status_code, summary.json()["code"]) == (404, "NOT_FOUND")
+    assert purchases.status_code == 404
+
+
 async def test_purchases_and_schedules_stay_in_their_store(client, customer, store_a, store_b):
     purchases_a = (
         await client.get(f"/api/v1/me/stores/{store_a.store_id}/purchases", headers=customer)

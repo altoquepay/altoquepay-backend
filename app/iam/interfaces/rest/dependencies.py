@@ -53,6 +53,7 @@ def get_password_recovery_service(
         reset_tokens=PasswordResetTokenRepositoryImpl(unit_of_work.session),
         hasher=Argon2PasswordHasher(),
         notifier=notifier,
+        customers=ExternalCustomers(CustomersFacade(unit_of_work)),
         unit_of_work=unit_of_work,
         token_minutes=settings.reset_token_minutes,
         frontend_url=settings.frontend_url,

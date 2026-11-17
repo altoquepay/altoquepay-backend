@@ -16,7 +16,11 @@ def normalize_username(username: str) -> str:
 
 @dataclass
 class User:
-    """Administrators sign in with their email and customers with their DNI."""
+    """Administrators sign in with their email and customers with their DNI.
+
+    password_version counts the password changes. A token carries the one it was issued with,
+    so a customer's older tokens stop working once the password changes.
+    """
 
     username: str
     password_hash: str
@@ -25,6 +29,7 @@ class User:
     full_name: str | None = None
     must_change_password: bool = False
     is_active: bool = True
+    password_version: int = 0
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -50,16 +55,12 @@ class User:
         return cls(email.value, password_hash, Role.STORE_ADMIN, store_id, full_name)
 
     @classmethod
-    def customer(cls, dni: Dni, temporary_password_hash: str) -> "User":
-        """The store hands the temporary password to the customer, who must replace it."""
-        return cls(dni.value, temporary_password_hash, Role.CUSTOMER, must_change_password=True)
+    def customer(cls, dni: Dni, password_hash: str) -> "User":
+        """Nobody knows the first password: the customer chooses theirs with a store's code."""
+        return cls(dni.value, password_hash, Role.CUSTOMER)
 
     def change_password(self, password_hash: str) -> None:
         """Set a password the user chose, which lifts the block of a temporary one."""
         self.password_hash = password_hash
         self.must_change_password = False
-
-    def assign_temporary_password(self, password_hash: str) -> None:
-        """Set a password someone else will hand over, so the user must replace it."""
-        self.password_hash = password_hash
-        self.must_change_password = True
+        self.password_version += 1

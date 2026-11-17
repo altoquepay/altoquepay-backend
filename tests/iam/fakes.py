@@ -92,8 +92,17 @@ class FixedStores(StoreDirectory):
 
 
 class FixedCustomers(CustomerDirectory):
+    """Every access code is good and belongs to the customer whose user is 1."""
+
+    def __init__(self) -> None:
+        self.redeemed: list[tuple[str, str]] = []
+
     async def get_customer_id(self, user_id: int) -> int:
         return user_id * 100
+
+    async def redeem_access_code(self, dni: str, code: str, now: datetime) -> int:
+        self.redeemed.append((dni, code))
+        return 1
 
 
 class RecordingNotifier(PasswordResetNotifier):

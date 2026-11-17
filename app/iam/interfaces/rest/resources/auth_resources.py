@@ -27,6 +27,12 @@ class ResetPasswordResource(BaseModel):
     new_password: str = Field(examples=["mi-clave-segura"])
 
 
+class RedeemAccessCodeResource(BaseModel):
+    dni: str = Field(max_length=8, examples=["45678912"])
+    code: str = Field(max_length=20, examples=["K7QH-M2XW-PB9D"])
+    new_password: str = Field(examples=["mi-clave-segura"])
+
+
 class CurrentUserResource(BaseModel):
     id: int
     username: str

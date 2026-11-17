@@ -1,14 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class CustomerCredentials:
-    """The temporary password is shown once, so the store can hand it to the customer."""
-
-    user_id: int
-    username: str
-    temporary_password: str
 
 
 class CustomerUsers(ABC):
@@ -18,7 +8,5 @@ class CustomerUsers(ABC):
     async def find_user_id(self, username: str) -> int | None: ...
 
     @abstractmethod
-    async def create(self, dni: str) -> CustomerCredentials: ...
-
-    @abstractmethod
-    async def reset_password(self, user_id: int) -> CustomerCredentials: ...
+    async def create(self, dni: str) -> int:
+        """Create the user of a new person and return its id. Nobody knows its password yet."""

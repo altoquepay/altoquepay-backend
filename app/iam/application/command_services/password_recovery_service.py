@@ -4,10 +4,12 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
+from app.iam.application.ports.customer_directory import CustomerDirectory
 from app.iam.application.ports.password_hasher import PasswordHasher
 from app.iam.application.ports.password_reset_notifier import PasswordResetNotifier
 from app.iam.domain.model.aggregates.password_reset_token import PasswordResetToken
 from app.iam.domain.model.aggregates.user import normalize_username
+from app.iam.domain.model.commands.redeem_access_code_command import RedeemAccessCodeCommand
 from app.iam.domain.model.commands.reset_forgotten_password_command import (
     ResetForgottenPasswordCommand,
 )
@@ -32,9 +34,10 @@ def hash_reset_token(token: str) -> str:
 
 
 class PasswordRecoveryService:
-    """Lets administrators who forgot their password choose a new one through their email.
+    """Lets users who cannot sign in choose a new password.
 
-    Customers sign in with their DNI and have no email, so their store resets their password.
+    Administrators get a link by email. Customers sign in with their DNI and have no email,
+    so they use the access code a store hands them in person.
     """
 
     def __init__(
@@ -43,6 +46,7 @@ class PasswordRecoveryService:
         reset_tokens: PasswordResetTokenRepository,
         hasher: PasswordHasher,
         notifier: PasswordResetNotifier,
+        customers: CustomerDirectory,
         unit_of_work: UnitOfWork,
         token_minutes: int,
         frontend_url: str,
@@ -51,6 +55,7 @@ class PasswordRecoveryService:
         self._reset_tokens = reset_tokens
         self._hasher = hasher
         self._notifier = notifier
+        self._customers = customers
         self._unit_of_work = unit_of_work
         self._token_lifetime = timedelta(minutes=token_minutes)
         self._frontend_url = frontend_url.rstrip("/")
@@ -93,4 +98,19 @@ class PasswordRecoveryService:
         user.change_password(await self._hasher.hash(command.new_password))
         await self._users.update(user)
         await self._reset_tokens.use_all_of_user(token.user_id, now)
+        await self._unit_of_work.commit()
+
+    async def reset_with_access_code(self, command: RedeemAccessCodeCommand, now: datetime) -> None:
+        """Set the password a customer chose, for the access code of one of their stores.
+
+        The store that issued the code never learns the password.
+        """
+        # Checked first, so a password that is too short does not spend the code.
+        ensure_valid_password(command.new_password, field="new_password")
+        user_id = await self._customers.redeem_access_code(command.dni, command.code, now)
+        user = await self._users.find_by_id(user_id)
+        if user is None:
+            raise ValueError("The customer has no user.")
+        user.change_password(await self._hasher.hash(command.new_password))
+        await self._users.update(user)
         await self._unit_of_work.commit()
