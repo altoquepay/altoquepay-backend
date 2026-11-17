@@ -18,3 +18,10 @@ class CycleAssigner(ABC):
 
         Raises CYCLE_CLOSED (409) if that cycle is closed or its cutoff ended before today.
         """
+
+    @abstractmethod
+    async def ensure_open(self, cycle_id: int, today: date) -> None:
+        """Lock the open cycle of a purchase until the commit, so the purchase may change.
+
+        Raises CYCLE_CLOSED (409) if that cycle is closed or its cutoff ended before today.
+        """

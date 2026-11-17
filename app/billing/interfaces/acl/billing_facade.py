@@ -102,6 +102,13 @@ class BillingFacade:
             cycle.id, cycle.year, cycle.month, cycle.cutoff_date, cycle.payment_date
         )
 
+    async def ensure_cycle_open(self, cycle_id: int, today: date) -> None:
+        """Lock an open cycle until the caller commits, so its purchases may still change.
+
+        Raises CYCLE_CLOSED (409) if it is closed or its cutoff ended before today.
+        """
+        await self._cycles.ensure_open(cycle_id, today)
+
     async def get_cycle_statement(
         self, account_id: int, year: int, month: int
     ) -> CycleStatement | None:

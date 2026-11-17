@@ -310,5 +310,46 @@ async def test_purchases_of_other_stores_are_not_found(client, unit_of_work, set
     history = await client.get("/api/v1/purchases", headers=other_admin)
     installments = await client.get("/api/v1/installments", headers=other_admin)
 
-    assert (detail.status_code, schedule.status_code) == (404, 404)
+    voided = await client.patch(f"/api/v1/purchases/{registered['id']}/void", headers=other_admin)
+
+    assert (detail.status_code, schedule.status_code, voided.status_code) == (404, 404, 404)
     assert (history.json()["total"], installments.json()["total"]) == (0, 0)
+
+
+async def test_a_purchase_voided_by_mistake_frees_the_credit_and_is_not_billed(
+    client, setup, admin
+):
+    # S/ 1000 of the S/ 1500 limit, so the same purchase fits again only once voided.
+    single_date = report_test_3(
+        setup,
+        mode="SINGLE_DATE",
+        installments_count=None,
+        items=[{"product_id": setup.product_id, "quantity": 10}],
+    )
+    mistaken = (await client.post("/api/v1/purchases", json=single_date, headers=admin)).json()
+
+    voided = await client.patch(f"/api/v1/purchases/{mistaken['id']}/void", headers=admin)
+    again = await client.post("/api/v1/purchases", json=single_date, headers=admin)
+    move_business_date_to(datetime(2026, 11, 15, 10, tzinfo=LIMA))
+    statement = await client.get(
+        f"/api/v1/customers/{setup.account_id}/cycles/2026/11", headers=admin
+    )
+
+    assert voided.status_code == 200
+    body = voided.json()
+    assert (body["status"], body["voided_by"], body["voided_at"]) == (
+        "VOIDED",
+        setup.user_id,
+        NOW.isoformat(),
+    )
+    assert again.status_code == 201
+    assert (statement.json()["status"], statement.json()["capital"]) == ("CLOSED", "1000.00")
+
+
+async def test_a_purchase_of_a_closed_cycle_cannot_be_voided(client, setup, admin):
+    registered = await register(client, setup, admin)
+    move_business_date_to(datetime(2026, 11, 15, 10, tzinfo=LIMA))
+
+    response = await client.patch(f"/api/v1/purchases/{registered['id']}/void", headers=admin)
+
+    assert (response.status_code, response.json()["code"]) == (409, "CYCLE_CLOSED")

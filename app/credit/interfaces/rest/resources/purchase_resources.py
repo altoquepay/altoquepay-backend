@@ -44,7 +44,8 @@ class InstallmentResource(BaseModel):
 
 
 class PurchaseResource(BaseModel):
-    """Rates are percentages. id is null in a simulation."""
+    """Rates are percentages. id is null in a simulation. voided_at and voided_by, the user who
+    voided it, are set only on a VOIDED purchase."""
 
     id: int | None
     customer_id: int
@@ -63,6 +64,8 @@ class PurchaseResource(BaseModel):
     ordinary_interest: Decimal
     total: Decimal
     status: PurchaseStatus
+    voided_at: datetime | None
+    voided_by: int | None
 
 
 class PurchaseDetailResource(PurchaseResource):

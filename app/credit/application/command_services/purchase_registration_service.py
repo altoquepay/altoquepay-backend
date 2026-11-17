@@ -91,3 +91,23 @@ class PurchaseRegistrationService:
         await self._purchases.add(purchase)
         await self._unit_of_work.commit()
         return purchase
+
+    async def void(self, store_id: int, purchase_id: int, user_id: int, now: datetime) -> Purchase:
+        """Void a purchase of the store registered by mistake, while its cycle is still open.
+
+        Another store's purchase is NOT_FOUND, as if missing. now is in the business time zone.
+        """
+        purchase = await self._purchases.find_by_id(purchase_id)
+        if purchase is None or purchase.store_id != store_id:
+            raise BusinessError("NOT_FOUND", "The purchase does not exist.", status=404)
+        # The account and then the cycle, the lock order of purchases and payments.
+        await self._accounts.lock_and_read(purchase.account_id)
+        await self._cycles.ensure_open(purchase.cycle_id, now.date())
+        # Read again under the lock: a payment may have settled it in the meantime.
+        purchase = await self._purchases.find_by_id(purchase_id)
+        if purchase is None:
+            raise ValueError("The purchase disappeared while its account was locked.")
+        purchase.void(user_id, now)
+        await self._purchases.update(purchase)
+        await self._unit_of_work.commit()
+        return purchase

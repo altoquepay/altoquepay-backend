@@ -69,6 +69,23 @@ async def register_purchase(
     return to_detail_resource(await registration_service.register(command, now), now.date())
 
 
+@router.patch("/purchases/{purchase_id}/void")
+async def void_purchase(
+    purchase_id: int,
+    store_id: StoreId,
+    user: User,
+    registration_service: RegistrationService,
+    now: Now,
+) -> PurchaseDetailResource:
+    """Void a purchase registered by mistake. Its installments are cancelled.
+
+    Only while nothing of it is paid (PURCHASE_NOT_VOIDABLE, 409) and its cycle is still open
+    (CYCLE_CLOSED, 409): a closed statement is never changed.
+    """
+    purchase = await registration_service.void(store_id, purchase_id, int(user.user_id), now)
+    return to_detail_resource(purchase, now.date())
+
+
 @router.get("/purchases")
 async def list_purchases(
     store_id: StoreId,

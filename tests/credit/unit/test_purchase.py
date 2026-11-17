@@ -149,3 +149,47 @@ def test_total_is_what_the_customer_pays():
 
     assert weekly.total == Money(Decimal("438.73"))
     assert single_date.total == Money(Decimal("426.99"))
+
+
+def test_voiding_cancels_every_installment_and_records_who_and_when():
+    purchase = register()
+    voided_at = datetime(2026, 10, 16, 9, tzinfo=UTC)
+
+    purchase.void(user_id=7, now=voided_at)
+
+    assert (purchase.status, purchase.voided_by, purchase.voided_at) == (
+        PurchaseStatus.VOIDED,
+        7,
+        voided_at,
+    )
+    assert {i.status for i in purchase.installments} == {InstallmentStatus.CANCELLED}
+    assert purchase.outstanding_principal() == Money(Decimal(0))
+
+
+def with_an_installment_paid() -> Purchase:
+    purchase = register()
+    purchase.mark_installment_paid(101, payment_id=50)
+    return purchase
+
+
+def prepaid() -> Purchase:
+    purchase = register()
+    purchase.cancel_remaining_installments(payment_id=60)
+    return purchase
+
+
+def paid_single_date() -> Purchase:
+    purchase = register(mode=PaymentMode.SINGLE_DATE, installments_count=None)
+    purchase.mark_paid(payment_id=70)
+    return purchase
+
+
+@pytest.mark.parametrize("paid", [with_an_installment_paid, prepaid, paid_single_date])
+def test_a_purchase_with_something_paid_cannot_be_voided(paid):
+    purchase = paid()
+
+    with pytest.raises(BusinessError) as error:
+        purchase.void(user_id=7, now=datetime(2026, 10, 16, 9, tzinfo=UTC))
+
+    assert (error.value.code, error.value.status) == ("PURCHASE_NOT_VOIDABLE", 409)
+    assert purchase.voided_at is None

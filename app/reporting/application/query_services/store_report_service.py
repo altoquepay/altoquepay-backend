@@ -138,7 +138,12 @@ class StoreReportService:
     async def _totals(
         self, store_id: int, from_date: date, to_date: date
     ) -> tuple[PurchaseTotals, PaymentTotals]:
-        purchases = await self._credit.store_purchases(store_id, from_date, to_date)
+        purchases = [
+            purchase
+            for purchase in await self._credit.store_purchases(store_id, from_date, to_date)
+            # A voided purchase was registered by mistake: it was never a sale.
+            if purchase.status != "VOIDED"
+        ]
         payments = await self._billing.store_payments(store_id, from_date, to_date)
         purchase_totals = PurchaseTotals(
             count=len(purchases),
