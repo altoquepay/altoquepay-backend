@@ -31,7 +31,7 @@ from app.iam.interfaces.rest.resources.auth_resources import (
     RedeemAccessCodeResource,
     ResetPasswordResource,
 )
-from app.iam.interfaces.rest.sign_in_attempts import limit_sign_in_attempts
+from app.iam.interfaces.rest.sign_in_attempts import limit_sign_in_attempts, reset_email_allowed
 from app.shared.interfaces.rest.business_date import get_business_now
 from app.shared.interfaces.rest.security import CurrentUser, get_signed_in_user
 
@@ -101,8 +101,13 @@ async def forgot_password(
     resource: ForgotPasswordResource,
     service: Annotated[PasswordRecoveryService, Depends(get_password_recovery_service)],
 ) -> None:
-    """Email a reset link to an administrator. Answers the same whether the email exists or not."""
-    await service.request_reset(resource.email)
+    """Email a reset link to an administrator. Answers the same whether the email exists or not.
+
+    Each email gets at most three links every 15 minutes; past that it answers the same and sends
+    nothing.
+    """
+    if await reset_email_allowed(resource.email):
+        await service.request_reset(resource.email)
 
 
 @router.post("/reset-password", status_code=204)

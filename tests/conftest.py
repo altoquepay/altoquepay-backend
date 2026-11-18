@@ -10,9 +10,8 @@ import sys
 
 import asyncpg
 import pytest
-from sqlalchemy import make_url
+from sqlalchemy import delete, make_url
 
-from app.iam.interfaces.rest.sign_in_attempts import sign_in_attempts
 from app.shared.infrastructure.config import Settings
 
 development_database_url = make_url(Settings().database_url)
@@ -25,6 +24,7 @@ os.environ["DATABASE_URL"] = test_database_url.render_as_string(hide_password=Fa
 # Imported only now: the engine reads DATABASE_URL when its module loads.
 from app.iam.domain.model.aggregates.user import User  # noqa: E402
 from app.iam.domain.model.value_objects.email import Email  # noqa: E402
+from app.iam.infrastructure.persistence.models import SignInAttemptModel  # noqa: E402
 from app.iam.infrastructure.persistence.user_repository_impl import UserRepositoryImpl  # noqa: E402
 from app.shared.domain.value_objects import Dni, Role  # noqa: E402
 from app.shared.infrastructure.database import session_factory  # noqa: E402
@@ -52,9 +52,11 @@ def pytest_sessionstart(session) -> None:
 
 
 @pytest.fixture(autouse=True)
-def forget_sign_in_attempts() -> None:
-    """Every test signs in from the same IP, so each one starts with no attempts counted."""
-    sign_in_attempts.clear()
+async def forget_sign_in_attempts() -> None:
+    """The attempt counter commits for real, so every test starts with no attempts counted."""
+    async with session_factory() as session:
+        await session.execute(delete(SignInAttemptModel))
+        await session.commit()
 
 
 class RollbackUnitOfWork(UnitOfWork):
