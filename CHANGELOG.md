@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-18
+
+No breaking changes for API clients. Run `alembic upgrade head`: there is one new migration. The Docker image applies the migrations every time it starts.
+
+### Added
+- **IAM**: each email gets at most 3 password reset emails every 15 minutes. Past that, `POST /auth/forgot-password` still answers 204 but sends nothing, so the limit never shows which emails have an account.
+- **Build**: a `Dockerfile` for the API and a `deploy` folder that runs it on one server with Docker Compose. Caddy gets the HTTPS certificate and forwards to the API, and PostgreSQL stays on the internal network. The README explains how to deploy on Amazon Lightsail.
+
+### Changed
+- **Database**: migration `3c8dcad76508` adds the `sign_in_attempts` table.
+
+### Fixed
+- **IAM**: the attempt limit is counted in PostgreSQL, so every worker and instance of the API shares it and a restart no longer resets it. This was a known gap of 0.6.0.
+
+### Security
+- Password reset requests were limited per IP only, so a script spread over many IPs could flood one inbox with reset emails. This was a known gap of 0.6.0.
+- The README suggested `FORWARDED_ALLOW_IPS=*` behind a proxy. With it, Uvicorn takes the first address in `X-Forwarded-For`, which the client writes, so anyone could dodge the limit per IP. The README now warns against it, and the compose in `deploy` trusts only Caddy.
+
+### Known gaps
+- The compose in `deploy` keeps PostgreSQL on the same server as the API and makes no backups of its own.
+- Still open from 0.6.0: paying a voided purchase answers `ALREADY_PAID` (409).
+- Still open from 0.5.0: a store the customer trusts, or one that activates someone's DNI before they do, can lock them out until the system administrator steps in, without a support screen.
+
 ## [0.6.0] - 2026-11-17
 
 Breaking for API clients: `GET /customers/lookup` returns only `customer_id`, `dni`, `account_id` and `notice`, `POST /customers` always needs `first_names` and `last_names`, and a token issued before a password change answers 401 for every role. Python 3.13 or newer is required. Run `alembic upgrade head`: there are two new migrations.
