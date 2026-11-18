@@ -17,7 +17,7 @@ from app.iam.infrastructure.persistence.user_repository_impl import UserReposito
 from app.iam.infrastructure.security.argon2_password_hasher import Argon2PasswordHasher
 from app.iam.interfaces.acl.iam_facade import IamFacade
 from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
-from app.iam.interfaces.rest.sign_in_attempts import MAXIMUM_ATTEMPTS
+from app.iam.interfaces.rest.sign_in_attempts import MAXIMUM_ATTEMPTS, RESET_EMAILS_PER_ACCOUNT
 from app.main import app as application
 from app.shared.domain.value_objects import Dni
 from app.shared.infrastructure.unit_of_work import get_unit_of_work
@@ -222,13 +222,29 @@ async def test_an_admin_token_issued_before_a_reset_stops_working(client, notifi
 async def test_an_ip_that_used_all_its_attempts_gets_no_more_reset_emails(
     client, notifier, store_admin_id
 ):
-    for _ in range(MAXIMUM_ATTEMPTS):
-        await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+    # Other emails each time, so the limit per account does not get in the way.
+    for attempt in range(MAXIMUM_ATTEMPTS):
+        await client.post(
+            "/api/v1/auth/forgot-password", json={"email": f"nadie{attempt}@bodega-test.pe"}
+        )
 
     refused = await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
 
     assert (refused.status_code, refused.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
-    assert len(notifier.sent) == MAXIMUM_ATTEMPTS
+    assert notifier.sent == []
+
+
+async def test_an_account_gets_at_most_three_reset_emails_every_15_minutes(
+    client, notifier, store_admin_id
+):
+    emails = [ADMIN_EMAIL] * RESET_EMAILS_PER_ACCOUNT + [ADMIN_EMAIL.upper()]
+
+    responses = [
+        await client.post("/api/v1/auth/forgot-password", json={"email": email}) for email in emails
+    ]
+
+    assert [response.status_code for response in responses] == [204] * len(emails)
+    assert len(notifier.sent) == RESET_EMAILS_PER_ACCOUNT
 
 
 async def test_forgot_password_answers_the_same_for_unknown_emails(client, notifier):

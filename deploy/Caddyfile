@@ -1,0 +1,4 @@
+# Gets and renews the HTTPS certificate of the domain by itself.
+{$DOMAIN} {
+	reverse_proxy api:8000
+}

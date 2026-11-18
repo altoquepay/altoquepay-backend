@@ -67,7 +67,16 @@ fastapi dev app/main.py
 
 The API starts on `http://localhost:8000` and reloads on file changes. The Swagger UI is available at `http://localhost:8000/docs`.
 
-Sign-in and password reset requests share 20 attempts per IP every 15 minutes. Behind a reverse proxy, such as Azure App Service, set `FORWARDED_ALLOW_IPS` to the proxy's address (or `*` when only the proxy can reach the app), so Uvicorn reads each client's IP from `X-Forwarded-For`. Otherwise every user shares the proxy's IP, and its limit.
+Sign-in and password reset requests share 20 attempts per IP every 15 minutes, and each email gets at most 3 reset links in that time. The counts live in the database, so every worker and instance of the API shares them.
+
+The limit per IP needs each client's real IP:
+
+- With nothing in front of Uvicorn, it already sees it.
+- With the compose in `deploy`, it is already set to Caddy's address.
+- Behind Nginx on the same machine, the default `FORWARDED_ALLOW_IPS` (`127.0.0.1`) works, as long as Nginx sends `X-Forwarded-For $proxy_add_x_forwarded_for`.
+- Behind an AWS Application Load Balancer, set `FORWARDED_ALLOW_IPS` to the VPC CIDR.
+
+Never set it to `*`. Uvicorn would then take the first address in `X-Forwarded-For`, which the client writes, so anyone could dodge the limit by sending a different one on each request.
 
 ### Tests and linting
 
@@ -78,6 +87,40 @@ pytest
 ruff check .
 ruff format .
 ```
+
+### Deploy
+
+The `deploy` folder runs the backend on one Linux server with Docker Compose:
+
+- Caddy gets the HTTPS certificate and forwards requests to the API.
+- PostgreSQL stays on the internal network.
+- The API applies the migrations every time it starts.
+
+The team's server is an Amazon Lightsail instance with Ubuntu 24.04 on the 2 GB plan. It has a static IP and ports 22, 80 and 443 open. A free [DuckDNS](https://www.duckdns.org/) name points to that IP.
+
+1. Install Docker on the server:
+
+   ```bash
+   sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
+   sudo usermod -aG docker ubuntu
+   ```
+
+2. Copy a released version from your machine. The server needs no access to the repository:
+
+   ```bash
+   git archive v0.7.0 | ssh ubuntu@<server> 'mkdir -p altoquepay && cd altoquepay && rm -rf app alembic && tar -x'
+   ```
+
+3. On the server, create `altoquepay/deploy/.env` from `deploy/.env.example` and fill it in.
+
+4. Start it:
+
+   ```bash
+   cd altoquepay/deploy
+   docker compose up -d --build
+   ```
+
+To update, repeat steps 2 and 4 with the new tag. `docker compose logs api` shows the API's output. Without an SMTP server, that output includes the password reset links.
 
 ## Configuration
 
