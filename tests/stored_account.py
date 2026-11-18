@@ -22,7 +22,7 @@ async def add_customer(unit_of_work: UnitOfWork, dni: str = "70000001") -> Custo
     user = User.customer(Dni(dni), "unused-hash")
     await UserRepositoryImpl(unit_of_work.session).add(user)
     assert user.id is not None
-    customer = Customer(Dni(dni), "Rosa", "Quispe Mamani", user.id)
+    customer = Customer(Dni(dni), user.id)
     await CustomerRepositoryImpl(unit_of_work.session).add(customer)
     return customer
 
@@ -36,13 +36,15 @@ async def add_account(
     status: AccountStatus = AccountStatus.ACTIVE,
     portal_linked: bool = True,
 ) -> StoreCustomer:
-    """Flush a new account with a 75% TEA and a 10% late TEA, without committing it.
+    """Flush Rosa Quispe Mamani's account, at 75% TEA and 10% late TEA, without committing.
 
     It is in the customer's portal, and trusted, unless portal_linked is False.
     """
     account = StoreCustomer(
         store_id=store_id,
         customer_id=customer_id,
+        first_names="Rosa",
+        last_names="Quispe Mamani",
         credit_limit=Money(Decimal("1500")),
         conditions=CreditConditions(
             cutoff_day=cutoff_day,

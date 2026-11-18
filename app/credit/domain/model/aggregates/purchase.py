@@ -26,6 +26,7 @@ class PurchaseStatus(StrEnum):
     ACTIVE = "ACTIVE"
     PAID = "PAID"
     PREPAID = "PREPAID"
+    VOIDED = "VOIDED"
 
 
 class InstallmentStatus(StrEnum):
@@ -106,6 +107,8 @@ class Purchase:
     installments: list[Installment] = field(default_factory=list)
     status: PurchaseStatus = PurchaseStatus.ACTIVE
     payment_id: int | None = None
+    voided_at: datetime | None = None
+    voided_by: int | None = None
     id: int | None = None
 
     @property
@@ -259,6 +262,26 @@ class Purchase:
                 installment.payment_id = payment_id
         self.status = PurchaseStatus.PREPAID
         self.payment_id = payment_id
+
+    def void(self, user_id: int, now: datetime) -> None:
+        """Void a purchase registered by mistake, while nothing of it is paid.
+
+        Its installments are cancelled, so it stops counting against the credit limit and is
+        left out of the statement. Credit checks first that its cycle is still open.
+        """
+        if self.status != PurchaseStatus.ACTIVE or any(
+            i.status != InstallmentStatus.PENDING for i in self.installments
+        ):
+            raise BusinessError(
+                "PURCHASE_NOT_VOIDABLE",
+                "Only a purchase with nothing paid can be voided.",
+                status=409,
+            )
+        for installment in self.installments:
+            installment.status = InstallmentStatus.CANCELLED
+        self.status = PurchaseStatus.VOIDED
+        self.voided_at = now
+        self.voided_by = user_id
 
 
 def outstanding_principal_of(purchases: list[Purchase]) -> Money:

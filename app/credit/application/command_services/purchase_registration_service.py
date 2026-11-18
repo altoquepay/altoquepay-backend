@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.credit.application.ports.credit_accounts import CreditAccounts
 from app.credit.application.ports.cycle_assigner import CycleAssigner
 from app.credit.application.ports.product_prices import ProductPrices
+from app.credit.application.ports.rate_cap_checker import RateCapChecker
 from app.credit.domain.model.aggregates.purchase import (
     Purchase,
     PurchaseItem,
@@ -22,12 +23,14 @@ class PurchaseRegistrationService:
         accounts: CreditAccounts,
         prices: ProductPrices,
         cycles: CycleAssigner,
+        caps: RateCapChecker,
         unit_of_work: UnitOfWork,
     ) -> None:
         self._purchases = purchases
         self._accounts = accounts
         self._prices = prices
         self._cycles = cycles
+        self._caps = caps
         self._unit_of_work = unit_of_work
 
     async def simulate(self, command: RegisterPurchaseCommand, now: datetime) -> Purchase:
@@ -47,6 +50,9 @@ class PurchaseRegistrationService:
             raise BusinessError(
                 "PURCHASE_IN_FUTURE", "A purchase cannot be in the future.", field="purchased_at"
             )
+        purchase_day = command.purchased_at.astimezone(now.tzinfo).date()
+        # The account keeps its rates when the BCRP lowers the cap, so check them on each sale.
+        await self._caps.check(terms.tea, terms.late_tea, purchase_day)
         product_ids = [item.product_id for item in command.items]
         prices = await self._prices.list_prices(command.store_id, product_ids)
         cycle = await self._cycles.cycle_of(command.account_id, command.purchased_at, now.date())
@@ -56,7 +62,7 @@ class PurchaseRegistrationService:
             cycle_id=cycle.cycle_id,
             cycle_payment_date=cycle.payment_date,
             purchased_at=command.purchased_at,
-            purchase_day=command.purchased_at.astimezone(now.tzinfo).date(),
+            purchase_day=purchase_day,
             mode=command.mode,
             items=[
                 PurchaseItem(item.product_id, item.quantity, prices[item.product_id])
@@ -83,5 +89,25 @@ class PurchaseRegistrationService:
         """Save the purchase and its cycle together, once every check passed."""
         purchase = await self.simulate(command, now)
         await self._purchases.add(purchase)
+        await self._unit_of_work.commit()
+        return purchase
+
+    async def void(self, store_id: int, purchase_id: int, user_id: int, now: datetime) -> Purchase:
+        """Void a purchase of the store registered by mistake, while its cycle is still open.
+
+        Another store's purchase is NOT_FOUND, as if missing. now is in the business time zone.
+        """
+        purchase = await self._purchases.find_by_id(purchase_id)
+        if purchase is None or purchase.store_id != store_id:
+            raise BusinessError("NOT_FOUND", "The purchase does not exist.", status=404)
+        # The account and then the cycle, the lock order of purchases and payments.
+        await self._accounts.lock_and_read(purchase.account_id)
+        await self._cycles.ensure_open(purchase.cycle_id, now.date())
+        # Read again under the lock: a payment may have settled it in the meantime.
+        purchase = await self._purchases.find_by_id(purchase_id)
+        if purchase is None:
+            raise ValueError("The purchase disappeared while its account was locked.")
+        purchase.void(user_id, now)
+        await self._purchases.update(purchase)
         await self._unit_of_work.commit()
         return purchase

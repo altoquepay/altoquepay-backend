@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import ColumnElement, Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.billing.domain.model.aggregates.billing_cycle import BillingCycle, CycleStatus
@@ -35,18 +35,27 @@ class BillingCycleRepositoryImpl(BillingCycleRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def find_by_id(self, cycle_id: int) -> BillingCycle | None:
-        model = await self._session.get(BillingCycleModel, cycle_id)
-        return to_domain(model) if model else None
+    async def find_by_id(self, cycle_id: int, *, for_update: bool = False) -> BillingCycle | None:
+        return await self._find(BillingCycleModel.id == cycle_id, for_update=for_update)
 
-    async def find(self, account_id: int, year: int, month: int) -> BillingCycle | None:
-        model = await self._session.scalar(
-            select(BillingCycleModel).where(
-                BillingCycleModel.store_customer_id == account_id,
-                BillingCycleModel.year == year,
-                BillingCycleModel.month == month,
-            )
+    async def find(
+        self, account_id: int, year: int, month: int, *, for_update: bool = False
+    ) -> BillingCycle | None:
+        return await self._find(
+            BillingCycleModel.store_customer_id == account_id,
+            BillingCycleModel.year == year,
+            BillingCycleModel.month == month,
+            for_update=for_update,
         )
+
+    async def _find(
+        self, *conditions: ColumnElement[bool], for_update: bool
+    ) -> BillingCycle | None:
+        query = select(BillingCycleModel).where(*conditions)
+        if for_update:
+            # populate_existing reads the row as locked, not as an earlier read left it.
+            query = query.with_for_update().execution_options(populate_existing=True)
+        model = await self._session.scalar(query)
         return to_domain(model) if model else None
 
     async def list_due_for_closing(

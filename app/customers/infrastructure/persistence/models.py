@@ -21,10 +21,6 @@ class CustomerModel(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     dni: Mapped[str] = mapped_column(String(8), unique=True)
-    first_names: Mapped[str] = mapped_column(String(100))
-    last_names: Mapped[str] = mapped_column(String(100))
-    phone: Mapped[str | None] = mapped_column(String(20))
-    address: Mapped[str | None] = mapped_column(String(200))
     # One user per person, shared by all the stores where they buy.
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
 
@@ -51,6 +47,11 @@ class StoreCustomerModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     store_id: Mapped[int] = mapped_column(ForeignKey("stores.id"))
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    # How this store knows the person; other stores keep their own.
+    first_names: Mapped[str] = mapped_column(String(100))
+    last_names: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str | None] = mapped_column(String(20))
+    address: Mapped[str | None] = mapped_column(String(200))
     currency: Mapped[str] = mapped_column(String(3), server_default="PEN")
     credit_limit: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     # Percentages, as shown to users: 40% is stored as 40.0000000.

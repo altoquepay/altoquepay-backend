@@ -16,7 +16,12 @@ from app.shared.domain.value_objects import Money
 
 CYCLE_STATUS = {"OPEN": "Abierto", "CLOSED": "Cerrado", "OVERDUE": "Vencido", "PAID": "Pagado"}
 MODE = {"SINGLE_DATE": "Fecha única", "WEEKLY": "Semanal"}
-PURCHASE_STATUS = {"ACTIVE": "Pendiente", "PAID": "Pagada", "PREPAID": "Prepagada"}
+PURCHASE_STATUS = {
+    "ACTIVE": "Pendiente",
+    "PAID": "Pagada",
+    "PREPAID": "Prepagada",
+    "VOIDED": "Anulada",
+}
 GRID = TableStyle(
     [
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),

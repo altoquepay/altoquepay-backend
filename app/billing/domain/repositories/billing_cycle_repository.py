@@ -17,10 +17,14 @@ class CycleFilter:
 
 class BillingCycleRepository(ABC):
     @abstractmethod
-    async def find_by_id(self, cycle_id: int) -> BillingCycle | None: ...
+    async def find_by_id(self, cycle_id: int, *, for_update: bool = False) -> BillingCycle | None:
+        """for_update locks the cycle until the transaction ends, so closing it waits."""
 
     @abstractmethod
-    async def find(self, account_id: int, year: int, month: int) -> BillingCycle | None: ...
+    async def find(
+        self, account_id: int, year: int, month: int, *, for_update: bool = False
+    ) -> BillingCycle | None:
+        """for_update locks the cycle until the transaction ends, so closing it waits."""
 
     @abstractmethod
     async def list_due_for_closing(

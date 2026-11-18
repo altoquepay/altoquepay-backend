@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from app.billing.application.ports.account_directory import AccountDirectory
 from app.billing.domain.model.aggregates.billing_cycle import BillingCycle
 from app.billing.domain.repositories.billing_cycle_repository import BillingCycleRepository
-from app.billing.domain.services.cycle_assignment import CyclePeriod, cycle_period_of
+from app.billing.domain.services.cycle_assignment import cycle_period_of
 from app.shared.domain.errors import BusinessError
 
 
@@ -28,7 +28,8 @@ class BillingCycleService:
 
         A cycle whose cutoff day ended before today is closed even if no read closed it yet,
         so a purchase dated in it is refused. Credit locks the account first, so two purchases
-        cannot create the same cycle twice.
+        cannot create the same cycle twice. The cycle is locked too, so a read closing it at
+        midnight either waits for the purchase or makes it see the cycle closed.
         """
         if purchased_at.tzinfo is None:
             raise ValueError("purchased_at must have a time zone.")
@@ -37,19 +38,31 @@ class BillingCycleService:
         account = await self._accounts.get_account(account_id)
         period = cycle_period_of(purchase_day, account.cutoff_day, account.payment_day)
         if period.cutoff_date < today:
-            raise cycle_closed(period)
-        cycle = await self._cycles.find(account_id, period.year, period.month)
+            raise cycle_closed(period.year, period.month)
+        cycle = await self._cycles.find(account_id, period.year, period.month, for_update=True)
         if cycle is None:
             cycle = BillingCycle.open(account_id, account.store_id, period)
             await self._cycles.add(cycle)
         elif not cycle.is_open:
-            raise cycle_closed(period)
+            raise cycle_closed(period.year, period.month)
         return cycle
 
+    async def ensure_open(self, cycle_id: int, today: date) -> None:
+        """Lock an open cycle until the transaction ends, so its purchases may still change.
 
-def cycle_closed(period: CyclePeriod) -> BusinessError:
+        Raises CYCLE_CLOSED (409) if it is closed or its cutoff ended before today, the rule of
+        get_or_open. The lock makes a read closing it wait.
+        """
+        cycle = await self._cycles.find_by_id(cycle_id, for_update=True)
+        if cycle is None:
+            raise ValueError("The cycle does not exist.")
+        if not cycle.is_open or cycle.cutoff_date < today:
+            raise cycle_closed(cycle.year, cycle.month)
+
+
+def cycle_closed(year: int, month: int) -> BusinessError:
     return BusinessError(
         "CYCLE_CLOSED",
-        f"The cycle of {period.month:02d}/{period.year} is already closed.",
+        f"The cycle of {month:02d}/{year} is already closed.",
         status=409,
     )

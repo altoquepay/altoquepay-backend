@@ -69,6 +69,8 @@ def purchase_fields(purchase: Purchase) -> dict:
         "ordinary_interest": purchase.ordinary_interest.amount,
         "total": purchase.total.amount,
         "status": purchase.status,
+        "voided_at": purchase.voided_at,
+        "voided_by": purchase.voided_by,
     }
 
 

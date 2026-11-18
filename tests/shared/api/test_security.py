@@ -13,6 +13,7 @@ from app.shared.interfaces.rest.security import (
     CurrentUser,
     Role,
     get_current_user,
+    get_signed_in_user,
     get_store_id,
     get_token_user,
     require_role,
@@ -21,6 +22,8 @@ from tests.authorization import authorization
 
 probe_app = FastAPI()
 register_error_handlers(probe_app)
+# These tests have no database: the password version check is tested through the API.
+probe_app.dependency_overrides[get_signed_in_user] = get_token_user
 
 
 @probe_app.get("/token-user")

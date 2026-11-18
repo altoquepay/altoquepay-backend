@@ -7,15 +7,7 @@ from app.iam.infrastructure.security.argon2_password_hasher import Argon2Passwor
 from app.iam.interfaces.acl.iam_facade import IamFacade, UserSummary
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Role
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork
 from tests.stored_store import add_store
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture

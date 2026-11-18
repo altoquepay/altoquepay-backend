@@ -64,7 +64,8 @@ class PurchaseRepositoryImpl(PurchaseRepository):
         self._session = session
 
     async def find_by_id(self, purchase_id: int) -> Purchase | None:
-        model = await self._session.get(PurchaseModel, purchase_id)
+        # Read as stored now: a payment may have changed it since this session loaded it.
+        model = await self._session.get(PurchaseModel, purchase_id, populate_existing=True)
         return to_domain(model) if model else None
 
     async def find_by_installment(self, installment_id: int) -> Purchase | None:

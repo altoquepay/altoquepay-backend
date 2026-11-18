@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import CreditConditions, Money
 
 # AlToque Pay only lends in soles.
 CURRENCY = "PEN"
+NAMES_MAXIMUM_LENGTH = 100
 # How long the customer has to redeem the access code a store handed them.
 ACCESS_CODE_LIFETIME = timedelta(hours=48)
 
@@ -21,6 +23,7 @@ class AccountStatus(StrEnum):
 class StoreCustomer:
     """An inactive account keeps its history, but the customer can no longer buy on credit.
 
+    The names and contact data are how this store knows the person; other stores keep their own.
     The customer sees the account in their portal only once it is linked, which takes the
     access code this store hands them, so no other store can link it or see it. A linked
     account stays trusted after it leaves the portal: only a trusted store may restore the
@@ -29,8 +32,12 @@ class StoreCustomer:
 
     store_id: int
     customer_id: int
+    first_names: str
+    last_names: str
     credit_limit: Money
     conditions: CreditConditions
+    phone: str | None = None
+    address: str | None = None
     status: AccountStatus = AccountStatus.ACTIVE
     created_at: datetime | None = None
     portal_linked_at: datetime | None = None
@@ -39,6 +46,12 @@ class StoreCustomer:
     access_code_expires_at: datetime | None = None
     id: int | None = None
 
+    def __post_init__(self) -> None:
+        self.first_names = required_name(self.first_names, "first_names")
+        self.last_names = required_name(self.last_names, "last_names")
+        self.phone = blank_as_none(self.phone)
+        self.address = blank_as_none(self.address)
+
     @property
     def is_active(self) -> bool:
         return self.status == AccountStatus.ACTIVE
@@ -46,6 +59,16 @@ class StoreCustomer:
     @property
     def is_portal_linked(self) -> bool:
         return self.portal_linked_at is not None
+
+    def update_contact(
+        self, first_names: str, last_names: str, phone: str | None, address: str | None
+    ) -> None:
+        """Change the person's data in this store only. The DNI is their identity, so it stays."""
+        self.first_names = first_names
+        self.last_names = last_names
+        self.phone = phone
+        self.address = address
+        self.__post_init__()
 
     def update_terms(self, credit_limit: Money, conditions: CreditConditions) -> None:
         """New terms apply to new purchases; registered ones keep the rates they were made with."""
@@ -87,3 +110,18 @@ class StoreCustomer:
         """Take the account out of the portal and stop its store from restoring the access."""
         self.portal_trusted = False
         self.unlink_portal()
+
+
+def required_name(name: str | None, field: str) -> str:
+    name = (name or "").strip()
+    if not 1 <= len(name) <= NAMES_MAXIMUM_LENGTH:
+        raise BusinessError(
+            "INVALID_NAME",
+            f"The name must have between 1 and {NAMES_MAXIMUM_LENGTH} characters.",
+            field=field,
+        )
+    return name
+
+
+def blank_as_none(text: str | None) -> str | None:
+    return (text or "").strip() or None

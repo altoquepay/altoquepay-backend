@@ -11,11 +11,15 @@ MONEY_FIELD = {"ge": 0, "max_digits": 12, "decimal_places": 2}
 
 
 class OpenAccountResource(BaseModel):
-    """Conditions left out take the store's defaults. Names are needed only for a new DNI."""
+    """Conditions left out take the store's defaults.
+
+    The names are how this store knows the person, so they are needed even for a DNI that
+    already buys in another store.
+    """
 
     dni: str = Field(max_length=8, examples=["45678912"])
-    first_names: str | None = Field(None, max_length=100, examples=["Rosa"])
-    last_names: str | None = Field(None, max_length=100, examples=["Quispe Mamani"])
+    first_names: str = Field(max_length=100, examples=["Rosa"])
+    last_names: str = Field(max_length=100, examples=["Quispe Mamani"])
     phone: str | None = Field(None, max_length=20, examples=["987654321"])
     address: str | None = Field(None, max_length=200, examples=["Jr. Los Pinos 456, SJL"])
     credit_limit: Decimal = Field(**MONEY_FIELD, examples=["1500"])
@@ -94,13 +98,10 @@ class PersonLookupResource(BaseModel):
 
     notice is PERSON_HAS_ACCOUNT when the person already buys in another store: not an error,
     but they keep the user and password they already have, and add this store with its code.
+    What other stores typed about the person is never shown; read the own account instead.
     """
 
     customer_id: int
     dni: str
-    first_names: str
-    last_names: str
-    phone: str | None
-    address: str | None
     account_id: int | None
     notice: str | None

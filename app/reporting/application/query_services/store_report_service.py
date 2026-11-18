@@ -55,6 +55,7 @@ class Dashboard:
     active_customers: int
     outstanding_principal: Decimal
     overdue_installments: int
+    overdue_statements: int
     overdue_amount: Decimal
     purchases_this_month: PurchaseTotals
     payments_this_month: PaymentTotals
@@ -88,16 +89,18 @@ class StoreReportService:
 
     async def dashboard(self, store_id: int, today: date) -> Dashboard:
         """Return the store's figures today. "This month" is the calendar month of today."""
-        # Pending installments due before today are the overdue ones.
-        overdue = await self._credit.store_installments_due(
-            store_id, FIRST_DAY, today - timedelta(days=1)
-        )
+        # Pending installments and unpaid statements due before today are the overdue ones.
+        yesterday = today - timedelta(days=1)
+        overdue = await self._credit.store_installments_due(store_id, FIRST_DAY, yesterday)
+        overdue_cycles = await self._billing.store_cycles_due(store_id, FIRST_DAY, yesterday)
         purchases, payments = await self._totals(store_id, today.replace(day=1), today)
         return Dashboard(
             active_customers=await self._accounts.active_count(store_id),
             outstanding_principal=await self._credit.store_outstanding_principal(store_id),
             overdue_installments=len(overdue),
-            overdue_amount=sum((i.amount for i in overdue), ZERO),
+            overdue_statements=len(overdue_cycles),
+            overdue_amount=sum((i.amount for i in overdue), ZERO)
+            + sum((c.total for c in overdue_cycles), ZERO),
             purchases_this_month=purchases,
             payments_this_month=payments,
             bcrp_cap=await self._caps.in_force(today),
@@ -135,7 +138,12 @@ class StoreReportService:
     async def _totals(
         self, store_id: int, from_date: date, to_date: date
     ) -> tuple[PurchaseTotals, PaymentTotals]:
-        purchases = await self._credit.store_purchases(store_id, from_date, to_date)
+        purchases = [
+            purchase
+            for purchase in await self._credit.store_purchases(store_id, from_date, to_date)
+            # A voided purchase was registered by mistake: it was never a sale.
+            if purchase.status != "VOIDED"
+        ]
         payments = await self._billing.store_payments(store_id, from_date, to_date)
         purchase_totals = PurchaseTotals(
             count=len(purchases),

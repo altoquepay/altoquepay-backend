@@ -17,16 +17,8 @@ from app.customers.interfaces.acl.customers_facade import (
     CustomersFacade,
 )
 from app.shared.domain.errors import BusinessError
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork
 from tests.stored_account import add_account, add_customer
 from tests.stored_store import add_store
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture

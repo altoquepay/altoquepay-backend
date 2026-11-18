@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-17
+
+Breaking for API clients: `GET /customers/lookup` returns only `customer_id`, `dni`, `account_id` and `notice`, `POST /customers` always needs `first_names` and `last_names`, and a token issued before a password change answers 401 for every role. Python 3.13 or newer is required. Run `alembic upgrade head`: there are two new migrations.
+
+### Added
+- **Credit**: `PATCH /purchases/{purchase_id}/void` voids a purchase registered by mistake, while nothing of it is paid (else `PURCHASE_NOT_VOIDABLE`, 409) and its cycle is still open (else `CYCLE_CLOSED`, 409). Its installments are cancelled, so it frees the credit and is not billed, and purchases gain `voided_at` and `voided_by`.
+- **Reporting**: the dashboard's `overdue_statements` counts the closed, unpaid cycle statements whose payment date passed.
+- **IAM**: sign-in and password reset requests share 20 attempts per IP every 15 minutes, then answer `TOO_MANY_ATTEMPTS` (429).
+- **Shared**: a request body over 3 MB answers `CONTENT_TOO_LARGE` (413) before an upload is written to disk.
+
+### Changed
+- **Customers**: names, phone and address belong to each store's account, so a store never sees or changes what another store typed. Lookup returns only the person's ids, and a store reads its own account with `GET /customers/{account_id}`.
+- **Reporting**: `overdue_amount` adds the overdue cycle statements to the overdue installments, and voided purchases are left out of the purchase totals.
+- **IAM**: the token's `password_version` is checked on every signed-in request, for store and system administrators too.
+- **Build**: Python 3.13 or newer; CI runs on 3.13.
+- **Database**: migration `64bc8f7a560c` moves the person's names, phone and address to `store_customers`, and `7cdbcc056b7c` adds the `VOIDED` status, `voided_at` and `voided_by` to `purchases`.
+
+### Fixed
+- **Credit**: each purchase and simulation is checked against the BCRP cap in force on the purchase day: `RATE_ABOVE_BCRP_CAP` (422) above it, `NO_BCRP_CAP_IN_FORCE` (409) when that day has none.
+- **Billing**: a purchase registered as its cycle closed at midnight could land in the closed cycle, and paying the statement then marked it paid without billing it. The purchase now locks its cycle.
+- **Reporting**: the dashboard counts overdue single date cycle statements, the known gap of 0.4.0.
+
+### Security
+- A store could read the phone and address another store typed for a customer, or change the names, phone and address every store saw.
+- Sign-in and password reset had no attempt limit, the known gap of 0.5.0; a script could also flood an administrator's inbox with reset emails.
+- Product image uploads of any size were written to disk before the 2 MB check.
+- A store or system administrator's token kept working after their password was reset.
+
+### Known gaps
+- The attempt limit is counted in each process's memory: several workers or replicas each keep their own count. Behind a proxy, set `FORWARDED_ALLOW_IPS`.
+- Password reset requests are limited per IP, not per email.
+- Paying a voided purchase answers `ALREADY_PAID` (409).
+- Still open from 0.5.0: a store the customer trusts, or one that activates someone's DNI before they do, can lock them out until the system administrator steps in, without a support screen.
+
 ## [0.5.0] - 2026-11-17
 
 Breaking for API clients: `POST /customers` returns `{account, access_code}` and `POST /customers/{account_id}/reset-password` is gone. Run `alembic upgrade head`: there are three new migrations.

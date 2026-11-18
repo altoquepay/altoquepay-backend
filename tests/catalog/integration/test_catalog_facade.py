@@ -9,15 +9,7 @@ from app.catalog.infrastructure.persistence.product_repository_impl import Produ
 from app.catalog.interfaces.acl.catalog_facade import ActiveProduct, CatalogFacade
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Money
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork
 from tests.stored_store import add_store
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with UnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 async def add_product(unit_of_work, store_id: int, code: str, price: str, active=True) -> Product:

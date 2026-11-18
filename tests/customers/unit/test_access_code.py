@@ -23,7 +23,12 @@ NOW = datetime(2026, 11, 17, 10, tzinfo=UTC)
 def account_of_store(store_id: int) -> StoreCustomer:
     rate = Rate.from_percent(Decimal("40"))
     return StoreCustomer(
-        store_id, 2, Money(Decimal("1500")), CreditConditions(10, 15, rate, rate, 4)
+        store_id,
+        2,
+        "Rosa",
+        "Quispe",
+        Money(Decimal("1500")),
+        CreditConditions(10, 15, rate, rate, 4),
     )
 
 

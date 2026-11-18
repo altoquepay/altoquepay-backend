@@ -11,8 +11,8 @@ from app.catalog.infrastructure.persistence.models import ProductImageModel
 from app.catalog.interfaces.acl.catalog_facade import CatalogFacade
 from app.main import app as application
 from app.shared.domain.errors import BusinessError
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
+from app.shared.interfaces.rest.body_size_limit import MAXIMUM_BODY_BYTES
 
 PASSWORD = "mi-clave-segura"
 RICE = {
@@ -25,17 +25,6 @@ RICE = {
     "list_price": "23.9",
 }
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
@@ -206,6 +195,18 @@ async def test_invalid_image_is_rejected_and_not_saved(client, admin, unit_of_wo
     assert response.status_code == 422
     assert (response.json()["code"], response.json()["field"]) == (code, "image")
     assert await saved_images(unit_of_work, rice["id"]) == []
+
+
+async def test_body_over_3_mb_is_refused_before_it_is_read(client, admin):
+    rice = (await create(client, admin)).json()
+
+    response = await client.post(
+        f"/api/v1/products/{rice['id']}/image",
+        files={"image": ("foto.png", PNG + b"\x00" * MAXIMUM_BODY_BYTES, "image/png")},
+        headers=admin,
+    )
+
+    assert (response.status_code, response.json()["code"]) == (413, "CONTENT_TOO_LARGE")
 
 
 @pytest.mark.parametrize(

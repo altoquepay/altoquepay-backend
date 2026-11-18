@@ -17,10 +17,10 @@ from app.iam.infrastructure.persistence.user_repository_impl import UserReposito
 from app.iam.infrastructure.security.argon2_password_hasher import Argon2PasswordHasher
 from app.iam.interfaces.acl.iam_facade import IamFacade
 from app.iam.interfaces.rest.dependencies import get_password_reset_notifier
+from app.iam.interfaces.rest.sign_in_attempts import MAXIMUM_ATTEMPTS
 from app.main import app as application
 from app.shared.domain.value_objects import Dni
-from app.shared.infrastructure.database import session_factory
-from app.shared.infrastructure.unit_of_work import UnitOfWork, get_unit_of_work
+from app.shared.infrastructure.unit_of_work import get_unit_of_work
 from tests.iam.fakes import RecordingNotifier
 from tests.stored_store import add_store
 
@@ -30,17 +30,6 @@ SYSTEM_ADMIN_EMAIL = "admin@altoquepay-test.pe"
 FIRST_PASSWORD = "clave-inicial"
 CUSTOMER_DNI = "70000001"
 CUSTOMER_PASSWORD = "clave-de-cliente"
-
-
-class RollbackUnitOfWork(UnitOfWork):
-    async def commit(self) -> None:
-        await self.session.flush()
-
-
-@pytest.fixture
-async def unit_of_work():
-    async with RollbackUnitOfWork(session_factory) as unit_of_work:
-        yield unit_of_work
 
 
 @pytest.fixture
@@ -85,7 +74,7 @@ async def customer_id(unit_of_work) -> int:
     assert user is not None and user.id is not None
     user.change_password(await Argon2PasswordHasher().hash(CUSTOMER_PASSWORD))
     await users.update(user)
-    customer = Customer(Dni(CUSTOMER_DNI), "Rosa", "Quispe", user.id)
+    customer = Customer(Dni(CUSTOMER_DNI), user.id)
     await CustomerRepositoryImpl(unit_of_work.session).add(customer)
     assert customer.id is not None
     return customer.id
@@ -128,6 +117,18 @@ async def test_wrong_password_is_rejected(client, store_admin_id):
 
     assert response.status_code == 401
     assert response.json()["code"] == "INVALID_CREDENTIALS"
+
+
+async def test_an_ip_that_used_all_its_attempts_cannot_sign_in_even_with_the_password(
+    client, store_admin_id
+):
+    for _ in range(MAXIMUM_ATTEMPTS):
+        wrong = await login(client, ADMIN_EMAIL, "otra-clave")
+
+    right = await login(client, ADMIN_EMAIL, ADMIN_PASSWORD)
+
+    assert wrong.status_code == 401
+    assert (right.status_code, right.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
 
 
 async def test_system_admin_is_blocked_until_changing_the_first_password(client, system_admin):
@@ -202,6 +203,32 @@ async def test_forgotten_password_is_reset_through_the_emailed_link(
     assert (reused.status_code, reused.json()["code"]) == (422, "INVALID_RESET_TOKEN")
     assert (await login(client, ADMIN_EMAIL, "clave-nueva")).status_code == 200
     assert (await login(client, ADMIN_EMAIL, ADMIN_PASSWORD)).status_code == 401
+
+
+async def test_an_admin_token_issued_before_a_reset_stops_working(client, notifier, store_admin_id):
+    stolen = bearer(await login(client, ADMIN_EMAIL, ADMIN_PASSWORD))
+    await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+    token = parse_qs(urlparse(notifier.sent[0][1]).query)["token"][0]
+    await client.post(
+        "/api/v1/auth/reset-password", json={"token": token, "new_password": "clave-nueva"}
+    )
+
+    profile = await client.get("/api/v1/store/profile", headers=stolen)
+    me = await client.get("/api/v1/auth/me", headers=stolen)
+
+    assert (profile.status_code, me.status_code) == (401, 401)
+
+
+async def test_an_ip_that_used_all_its_attempts_gets_no_more_reset_emails(
+    client, notifier, store_admin_id
+):
+    for _ in range(MAXIMUM_ATTEMPTS):
+        await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+
+    refused = await client.post("/api/v1/auth/forgot-password", json={"email": ADMIN_EMAIL})
+
+    assert (refused.status_code, refused.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
+    assert len(notifier.sent) == MAXIMUM_ATTEMPTS
 
 
 async def test_forgot_password_answers_the_same_for_unknown_emails(client, notifier):
