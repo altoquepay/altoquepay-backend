@@ -98,29 +98,50 @@ The `deploy` folder runs the backend on one Linux server with Docker Compose:
 
 The team's server is an Amazon Lightsail instance with Ubuntu 24.04 on the 2 GB plan. It has a static IP and ports 22, 80 and 443 open. A free [DuckDNS](https://www.duckdns.org/) name points to that IP.
 
-1. Install Docker on the server:
+Every release deploys itself. Pushing a tag such as `v0.7.1` runs the Deploy workflow, which:
+
+1. Runs the CI workflow on the tagged commit.
+2. Builds the image once and publishes it as `ghcr.io/altoquepay/altoquepay-backend:0.7.1`.
+3. Connects to the server with a key that can only run `deploy/deploy.sh`. The script takes the deploy files of that tag, pulls the image with the workflow's own short-lived token and restarts the API.
+4. Checks that `/health` answers and `/openapi.json` reports the new version.
+
+To deploy a published version again, for example to roll back, open the Deploy workflow in the Actions tab, choose **Run workflow** and type the version. The migrations are not undone, so roll back only to a version that works with the current database.
+
+`docker compose logs api` on the server shows the API's output. Without an SMTP server, that output includes the password reset links.
+
+#### Server setup
+
+Done once per server:
+
+1. Install Docker:
 
    ```bash
    sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2
    sudo usermod -aG docker ubuntu
    ```
 
-2. Copy a released version from your machine. The server needs no access to the repository:
+2. Copy the `deploy` folder of a release from your machine. The server needs no access to the repository:
 
    ```bash
-   git archive v0.7.0 | ssh ubuntu@<server> 'mkdir -p altoquepay && cd altoquepay && rm -rf app alembic && tar -x'
+   git archive v0.7.1 deploy | ssh ubuntu@<server> 'mkdir -p altoquepay && tar -x -C altoquepay'
    ```
 
 3. On the server, create `altoquepay/deploy/.env` from `deploy/.env.example` and fill it in.
 
-4. Start it:
+4. Create a key pair used only by GitHub Actions, and add its public key to `~/.ssh/authorized_keys` on the server, limited to the deploy script:
 
-   ```bash
-   cd altoquepay/deploy
-   docker compose up -d --build
+   ```
+   restrict,command="/home/ubuntu/altoquepay/deploy/deploy.sh" ssh-ed25519 AAAA... github-actions-deploy
    ```
 
-To update, repeat steps 2 and 4 with the new tag. `docker compose logs api` shows the API's output. Without an SMTP server, that output includes the password reset links.
+5. In the repository settings, under Secrets and variables for Actions, add:
+   - the secret `DEPLOY_SSH_KEY`, with that private key;
+   - the variable `DEPLOY_HOST`, with the server's IP;
+   - the variable `DEPLOY_KNOWN_HOSTS`, with the server's IP followed by the contents of its `/etc/ssh/ssh_host_ed25519_key.pub`, so the workflow only connects to that server.
+
+6. Push the next release tag, or run the Deploy workflow with a version already published.
+
+Without GitHub Actions, copy the whole release with `git archive <tag>` and build it on the server: `API_VERSION=local docker compose up -d --build`.
 
 ## Configuration
 
