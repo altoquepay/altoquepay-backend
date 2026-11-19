@@ -1,5 +1,6 @@
 # One server: Caddy serves HTTPS and forwards to the API, which uses PostgreSQL.
 # Run it from this folder, next to a .env made from .env.example: docker compose up -d --build
+# On the server, deploy.sh runs it with the version the Deploy workflow sends.
 name: altoquepay
 
 services:
@@ -18,6 +19,8 @@ services:
       retries: 12
 
   api:
+    # The server pulls the image the Deploy workflow published; locally, --build makes it.
+    image: ghcr.io/altoquepay/altoquepay-backend:${API_VERSION:-local}
     build: ..
     restart: unless-stopped
     env_file: .env
