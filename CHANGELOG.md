@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-19
+
+No changes to the API and no new migrations.
+
+### Added
+- **Build**: the Deploy workflow deploys every release. A tag such as `v0.7.1` runs the tests, publishes the image as `ghcr.io/altoquepay/altoquepay-backend:0.7.1`, deploys it to the server over SSH and checks `/health` and the version. Run workflow deploys a published version again, for example to roll back.
+- **Build**: `deploy/deploy.sh`, the only command the GitHub Actions key can run on the server. It accepts only a version, and pulls the image with the job's token, which expires when the job ends.
+
+### Changed
+- **Build**: the compose in `deploy` runs the API image published for the version in `API_VERSION`, and builds it locally when that is unset.
+
+### Known gaps
+- Run workflow can only roll back to versions the workflow published, from 0.7.1 on.
+- Still open from 0.7.0: the compose in `deploy` makes no backups of its own, paying a voided purchase answers `ALREADY_PAID` (409), and the 0.5.0 lockouts still need the system administrator.
+
 ## [0.7.0] - 2026-11-18
 
 No breaking changes for API clients. Run `alembic upgrade head`: there is one new migration. The Docker image applies the migrations every time it starts.
