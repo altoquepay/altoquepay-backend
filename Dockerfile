@@ -1,5 +1,7 @@
 FROM python:3.14-slim
 
+# Links the published image to the repository, so it shares its access.
+LABEL org.opencontainers.image.source=https://github.com/altoquepay/altoquepay-backend
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
