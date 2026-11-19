@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [develop, main]
+  # The Deploy workflow runs it on each release tag before publishing anything.
+  workflow_call:
 
 jobs:
   test:

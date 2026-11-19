@@ -1,0 +1,88 @@
+name: Deploy
+
+# A release tag is tested, published to GHCR and deployed. Run workflow deploys a published version again.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published version to deploy, such as 0.7.1
+        required: true
+
+permissions:
+  contents: read
+
+# One deploy at a time, and a queued one never stops another halfway.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/altoquepay/altoquepay-backend
+  API_URL: https://altoquepay.duckdns.org
+
+jobs:
+  test:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: |
+          version="${GITHUB_REF_NAME#v}"
+          docker build -t "$IMAGE:$version" \
+            --label org.opencontainers.image.version="$version" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" .
+          docker push "$IMAGE:$version"
+
+  deploy:
+    needs: image
+    # Also runs when Run workflow skips the tests and the image to deploy a published version.
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REQUESTED_VERSION: ${{ inputs.version || github.ref_name }}
+    steps:
+      - name: Deploy over SSH
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        # The server key only runs deploy/deploy.sh. The token goes on stdin, never in the command.
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n%s\n' "$GITHUB_ACTOR" "$GITHUB_TOKEN" |
+            ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              "ubuntu@$DEPLOY_HOST" "${REQUESTED_VERSION#v}"
+
+      - name: Smoke test
+        run: |
+          version="${REQUESTED_VERSION#v}"
+          for attempt in $(seq 12); do
+            deployed=$(curl -fsS "$API_URL/openapi.json" | jq -r .info.version) || true
+            if [ "$deployed" = "$version" ] && curl -fsS "$API_URL/health"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "$API_URL does not answer as version $version" >&2
+          exit 1
