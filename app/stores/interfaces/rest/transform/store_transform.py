@@ -1,5 +1,5 @@
 from app.shared.domain.errors import BusinessError
-from app.shared.domain.value_objects import CreditConditions, Rate, Ruc
+from app.shared.domain.value_objects import CreditConditions, Rate, Ruc, optional_phone
 from app.stores.application.query_services.store_query_service import StoreWithCustomers
 from app.stores.domain.model.aggregates.store import Store
 from app.stores.domain.model.commands.register_store_command import RegisterStoreCommand
@@ -31,7 +31,7 @@ def to_update_profile_command(
         store_id=store_id,
         business_name=resource.business_name,
         address=resource.address,
-        phone=resource.phone,
+        phone=optional_phone(resource.phone),
         default_conditions=to_default_conditions(resource),
     )
 

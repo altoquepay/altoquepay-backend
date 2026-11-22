@@ -96,6 +96,29 @@ class Ruc:
             raise BusinessError("INVALID_RUC", "The RUC must have 11 digits.", field="ruc")
 
 
+# 6 to 15 digits, the most E.164 allows, with an optional leading + and one space or hyphen
+# between digits, so "+51 987 654 321" and "01 234-5678" pass and letters do not.
+PHONE_PATTERN = re.compile(r"\+?[0-9](?:[ -]?[0-9]){5,14}")
+
+
+def optional_phone(text: str | None) -> str | None:
+    """Check a phone as people type it and keep it that way; a blank one is no phone.
+
+    Only what the API receives is checked, so phones stored before the check still load.
+    """
+    phone = (text or "").strip()
+    if not phone:
+        return None
+    if not PHONE_PATTERN.fullmatch(phone):
+        raise BusinessError(
+            "INVALID_PHONE",
+            "The phone must have 6 to 15 digits, optionally separated by spaces or hyphens "
+            "and starting with +.",
+            field="phone",
+        )
+    return phone
+
+
 CUTOFF_DAYS = range(1, 26)
 PAYMENT_DAYS = range(1, 29)
 MAX_WEEKS = range(1, 100)

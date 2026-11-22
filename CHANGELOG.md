@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-22
+
+No new migrations. A phone with letters or symbols, which the API accepted before, now answers `INVALID_PHONE` (422).
+
+### Added
+- **Catalog**: `PATCH /products/{product_id}/reactivate` sells a deactivated product again, with the details and prices it has now. Its code stays taken while it is inactive, so before this a product deactivated by mistake could be neither sold nor created again.
+- **Customers**: `PATCH /customers/{account_id}/reactivate` lets a deactivated account buy on credit again, with its current terms. Before this the store could neither reactivate it nor open another account for the same DNI.
+
+### Fixed
+- **Customers and Stores**: the phone of a customer account and of the store profile accepted any text of up to 20 characters, such as `abcdefgh`. It now needs 6 to 15 digits, optionally separated by spaces or hyphens and starting with `+`; otherwise the request answers `INVALID_PHONE` (422) on the `phone` field. A blank phone is still `null`.
+- **Customers**: the description of `PUT /customers/{account_id}` said the person's data is shared by every store where they buy, which stopped being true in 0.6.0.
+
+### Known gaps
+- Phones saved before 0.8.0 are not checked until their account or store profile is edited, and saving it then needs a valid phone.
+- Still open from 0.7.1: Run workflow can only roll back to versions the workflow published, from 0.7.1 on.
+- Still open from 0.7.0: the compose in `deploy` makes no backups of its own, paying a voided purchase answers `ALREADY_PAID` (409), and the 0.5.0 lockouts still need the system administrator.
+
 ## [0.7.1] - 2026-11-19
 
 No changes to the API and no new migrations.

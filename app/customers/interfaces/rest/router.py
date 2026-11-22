@@ -123,7 +123,7 @@ async def update_customer(
 ) -> CustomerAccountResource:
     """Replace the person's data and the account terms. The DNI never changes.
 
-    The person's data is shared by every store where they buy.
+    The names, phone and address belong to this store's account: other stores keep their own.
     """
     command = to_update_command(resource, store_id, account_id)
     return to_resource(await command_service.update(command, today))
@@ -135,6 +135,14 @@ async def deactivate_customer(
 ) -> CustomerAccountResource:
     """Stop new purchases on credit in this store. Past purchases and payments stay."""
     return to_resource(await command_service.deactivate(store_id, account_id))
+
+
+@router.patch("/{account_id}/reactivate")
+async def reactivate_customer(
+    account_id: int, store_id: StoreId, command_service: CommandService
+) -> CustomerAccountResource:
+    """Allow new purchases on credit in this store again, with the account's current terms."""
+    return to_resource(await command_service.reactivate(store_id, account_id))
 
 
 @router.post("/{account_id}/access-code")

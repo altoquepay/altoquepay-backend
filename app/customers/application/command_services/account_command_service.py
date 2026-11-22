@@ -118,6 +118,14 @@ class AccountCommandService:
         await self._unit_of_work.commit()
         return found
 
+    async def reactivate(self, store_id: int, account_id: int) -> CustomerAccount:
+        """Allow new purchases on credit again, with the account's current terms."""
+        found = await self._query.get(store_id, account_id)
+        found.account.reactivate()
+        await self._accounts.update(found.account)
+        await self._unit_of_work.commit()
+        return found
+
     async def issue_access_code(self, store_id: int, account_id: int, now: datetime) -> AccessCode:
         """Give the customer a new access code, which replaces the one issued before.
 

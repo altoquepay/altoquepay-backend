@@ -216,6 +216,22 @@ async def test_an_account_needs_the_names(client, admin):
     assert (response.json()["code"], response.json()["field"]) == ("INVALID_NAME", "first_names")
 
 
+async def test_a_phone_with_letters_is_rejected_when_opening_or_updating(client, admin):
+    opened = await open_account(client, admin, phone="abcdefgh")
+    account = (await open_account(client, admin)).json()["account"]
+    editable = ("first_names", "last_names", "address", "credit_limit", "cutoff_day")
+    editable += ("payment_day", "tea", "late_tea", "max_weeks")
+    updated = await client.put(
+        f"/api/v1/customers/{account['id']}",
+        json={field: account[field] for field in editable} | {"phone": "abcdefgh"},
+        headers=admin,
+    )
+
+    for response in (opened, updated):
+        assert response.status_code == 422
+        assert (response.json()["code"], response.json()["field"]) == ("INVALID_PHONE", "phone")
+
+
 async def test_person_from_another_store_keeps_their_user_and_gets_a_code(
     client, admin, other_admin
 ):
@@ -468,12 +484,24 @@ async def test_deactivated_account_stays_listed_as_inactive(client, admin):
     assert response.json()["status"] == "INACTIVE"
 
 
+async def test_reactivated_account_is_listed_as_active_again(client, admin):
+    account_id = (await open_account(client, admin)).json()["account"]["id"]
+    await client.patch(f"/api/v1/customers/{account_id}/deactivate", headers=admin)
+
+    response = await client.patch(f"/api/v1/customers/{account_id}/reactivate", headers=admin)
+    active = await client.get("/api/v1/customers?status=ACTIVE", headers=admin)
+
+    assert response.json()["status"] == "ACTIVE"
+    assert [item["id"] for item in active.json()["items"]] == [account_id]
+
+
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
         ("GET", "", None),
         ("PUT", "", {"first_names": "x"}),
         ("PATCH", "/deactivate", None),
+        ("PATCH", "/reactivate", None),
         ("POST", "/access-code", None),
     ],
 )
