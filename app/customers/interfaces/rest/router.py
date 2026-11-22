@@ -137,6 +137,14 @@ async def deactivate_customer(
     return to_resource(await command_service.deactivate(store_id, account_id))
 
 
+@router.patch("/{account_id}/reactivate")
+async def reactivate_customer(
+    account_id: int, store_id: StoreId, command_service: CommandService
+) -> CustomerAccountResource:
+    """Allow new purchases on credit in this store again, with the account's current terms."""
+    return to_resource(await command_service.reactivate(store_id, account_id))
+
+
 @router.post("/{account_id}/access-code")
 async def issue_access_code(
     account_id: int, store_id: StoreId, command_service: CommandService, now: Now

@@ -69,12 +69,14 @@ def test_new_terms_replace_the_old_ones():
     assert account.conditions.tea.percent == Decimal("75.0000000")
 
 
-def test_deactivated_account_is_no_longer_active():
+def test_deactivated_account_is_no_longer_active_until_reactivated():
     account = StoreCustomer(1, 2, "Rosa", "Quispe", Money(Decimal("1500")), conditions("40"))
 
     account.deactivate()
-
     assert (account.status, account.is_active) == (AccountStatus.INACTIVE, False)
+
+    account.reactivate()
+    assert (account.status, account.is_active) == (AccountStatus.ACTIVE, True)
 
 
 NOW = datetime(2026, 11, 17, 10, tzinfo=UTC)
