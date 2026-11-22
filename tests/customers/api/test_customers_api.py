@@ -216,6 +216,22 @@ async def test_an_account_needs_the_names(client, admin):
     assert (response.json()["code"], response.json()["field"]) == ("INVALID_NAME", "first_names")
 
 
+async def test_a_phone_with_letters_is_rejected_when_opening_or_updating(client, admin):
+    opened = await open_account(client, admin, phone="abcdefgh")
+    account = (await open_account(client, admin)).json()["account"]
+    editable = ("first_names", "last_names", "address", "credit_limit", "cutoff_day")
+    editable += ("payment_day", "tea", "late_tea", "max_weeks")
+    updated = await client.put(
+        f"/api/v1/customers/{account['id']}",
+        json={field: account[field] for field in editable} | {"phone": "abcdefgh"},
+        headers=admin,
+    )
+
+    for response in (opened, updated):
+        assert response.status_code == 422
+        assert (response.json()["code"], response.json()["field"]) == ("INVALID_PHONE", "phone")
+
+
 async def test_person_from_another_store_keeps_their_user_and_gets_a_code(
     client, admin, other_admin
 ):

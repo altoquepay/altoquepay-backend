@@ -16,7 +16,7 @@ from app.customers.interfaces.rest.resources.customer_resources import (
     PersonLookupResource,
     UpdateAccountResource,
 )
-from app.shared.domain.value_objects import CreditConditions, Dni, Money, Rate
+from app.shared.domain.value_objects import CreditConditions, Dni, Money, Rate, optional_phone
 
 
 def to_open_command(resource: OpenAccountResource, store_id: int) -> OpenAccountCommand:
@@ -25,7 +25,7 @@ def to_open_command(resource: OpenAccountResource, store_id: int) -> OpenAccount
         dni=Dni(resource.dni.strip()),
         first_names=resource.first_names,
         last_names=resource.last_names,
-        phone=resource.phone,
+        phone=optional_phone(resource.phone),
         address=resource.address,
         credit_limit=Money(resource.credit_limit),
         cutoff_day=resource.cutoff_day,
@@ -44,7 +44,7 @@ def to_update_command(
         account_id=account_id,
         first_names=resource.first_names,
         last_names=resource.last_names,
-        phone=resource.phone,
+        phone=optional_phone(resource.phone),
         address=resource.address,
         credit_limit=Money(resource.credit_limit),
         conditions=CreditConditions(

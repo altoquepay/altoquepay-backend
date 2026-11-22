@@ -154,6 +154,7 @@ async def test_each_administrator_sees_only_their_own_store(client):
         ({"default_tea": "114.69"}, "RATE_ABOVE_BCRP_CAP", "default_tea"),
         ({"default_late_tea": "17.21"}, "RATE_ABOVE_BCRP_CAP", "default_late_tea"),
         ({"default_tea": "-1"}, "VALIDATION_ERROR", "default_tea"),
+        ({"phone": "abcdefgh"}, "INVALID_PHONE", "phone"),
     ],
 )
 async def test_invalid_profile_is_rejected_on_its_field(client, invalid_values, code, field):

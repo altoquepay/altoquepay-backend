@@ -6,7 +6,14 @@ from decimal import Decimal
 import pytest
 
 from app.shared.domain.errors import BusinessError
-from app.shared.domain.value_objects import CreditConditions, Dni, Money, Rate, Ruc
+from app.shared.domain.value_objects import (
+    CreditConditions,
+    Dni,
+    Money,
+    Rate,
+    Ruc,
+    optional_phone,
+)
 
 
 def test_money_rounds_half_up_to_two_decimals():
@@ -77,6 +84,30 @@ def test_ruc_requires_eleven_digits(invalid_ruc):
     with pytest.raises(BusinessError) as error:
         Ruc(invalid_ruc)
     assert error.value.code == "INVALID_RUC"
+
+
+@pytest.mark.parametrize(
+    ("typed", "kept"),
+    [
+        ("987654321", "987654321"),
+        (" +51 987 654 321 ", "+51 987 654 321"),
+        ("01 234-5678", "01 234-5678"),
+        ("  ", None),
+        (None, None),
+    ],
+)
+def test_phone_is_kept_as_typed_and_blank_means_none(typed, kept):
+    assert optional_phone(typed) == kept
+
+
+@pytest.mark.parametrize(
+    "invalid_phone",
+    ["abcdefgh", "98765", "987--654", "(01) 2345678", "9876543210123456", "+51 98765432a"],
+)
+def test_phone_needs_six_to_fifteen_digits(invalid_phone):
+    with pytest.raises(BusinessError) as error:
+        optional_phone(invalid_phone)
+    assert (error.value.code, error.value.field) == ("INVALID_PHONE", "phone")
 
 
 def credit_conditions(**overrides) -> CreditConditions:
