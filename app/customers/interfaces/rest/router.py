@@ -123,7 +123,7 @@ async def update_customer(
 ) -> CustomerAccountResource:
     """Replace the person's data and the account terms. The DNI never changes.
 
-    The person's data is shared by every store where they buy.
+    The names, phone and address belong to this store's account: other stores keep their own.
     """
     command = to_update_command(resource, store_id, account_id)
     return to_resource(await command_service.update(command, today))
