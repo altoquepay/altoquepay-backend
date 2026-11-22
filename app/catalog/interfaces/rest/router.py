@@ -88,6 +88,14 @@ async def deactivate_product(
     return to_resource(await command_service.deactivate(store_id, product_id))
 
 
+@router.patch("/{product_id}/reactivate")
+async def reactivate_product(
+    product_id: int, store_id: StoreId, command_service: CommandService
+) -> ProductResource:
+    """Sell a deactivated product again, with the details and prices it has now."""
+    return to_resource(await command_service.reactivate(store_id, product_id))
+
+
 @router.post("/{product_id}/image")
 async def upload_product_image(
     product_id: int, image: UploadFile, store_id: StoreId, command_service: CommandService

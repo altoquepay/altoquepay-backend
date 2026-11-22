@@ -78,6 +78,9 @@ class StoreCustomer:
     def deactivate(self) -> None:
         self.status = AccountStatus.INACTIVE
 
+    def reactivate(self) -> None:
+        self.status = AccountStatus.ACTIVE
+
     def issue_access_code(self, code_hash: str, now: datetime) -> datetime:
         """Keep the hash of a new code, which replaces the previous one. Return when it expires."""
         self.access_code_hash = code_hash

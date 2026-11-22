@@ -41,6 +41,14 @@ class ProductCommandService:
         await self._unit_of_work.commit()
         return product
 
+    async def reactivate(self, store_id: int, product_id: int) -> Product:
+        """Sell the product again, with the details and prices it has now."""
+        product = await self._query.get(store_id, product_id)
+        product.reactivate()
+        await self._products.update(product)
+        await self._unit_of_work.commit()
+        return product
+
     async def change_image(self, store_id: int, product_id: int, content: bytes) -> Product:
         """Save a JPEG, PNG or WebP image of up to 2 MB and replace the previous one."""
         product = await self._query.get(store_id, product_id)

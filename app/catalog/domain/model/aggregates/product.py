@@ -64,6 +64,9 @@ class Product:
     def deactivate(self) -> None:
         self.is_active = False
 
+    def reactivate(self) -> None:
+        self.is_active = True
+
 
 @dataclass(frozen=True)
 class ProductDetails:
