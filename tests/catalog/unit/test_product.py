@@ -42,12 +42,14 @@ def test_texts_outside_their_length_are_rejected(changes, field):
     assert (error.value.code, error.value.field) == ("INVALID_TEXT", field)
 
 
-def test_deactivated_product_is_kept_but_inactive():
+def test_deactivated_product_is_kept_but_inactive_until_reactivated():
     created = product()
 
     created.deactivate()
-
     assert not created.is_active
+
+    created.reactivate()
+    assert created.is_active
 
 
 def test_update_replaces_the_details_and_validates_again():

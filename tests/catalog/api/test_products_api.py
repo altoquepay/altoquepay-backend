@@ -140,6 +140,18 @@ async def test_deactivated_product_cannot_be_sold(client, admin, unit_of_work):
     assert error.value.code == "PRODUCT_NOT_AVAILABLE"
 
 
+async def test_reactivated_product_can_be_sold_again(client, admin, unit_of_work):
+    rice = (await create(client, admin)).json()
+    await client.patch(f"/api/v1/products/{rice['id']}/deactivate", headers=admin)
+
+    response = await client.patch(f"/api/v1/products/{rice['id']}/reactivate", headers=admin)
+
+    assert response.json()["is_active"] is True
+    store_id = await store_of(client, admin)
+    sellable = await CatalogFacade(unit_of_work).get_active_products(store_id, [rice["id"]])
+    assert [product.product_id for product in sellable] == [rice["id"]]
+
+
 async def saved_images(unit_of_work, product_id: int) -> list[str]:
     """Return the names of the stored images of a product."""
     names = await unit_of_work.session.scalars(
@@ -211,7 +223,12 @@ async def test_body_over_3_mb_is_refused_before_it_is_read(client, admin):
 
 @pytest.mark.parametrize(
     ("method", "path", "send"),
-    [("GET", "", {}), ("PUT", "", {"json": RICE}), ("PATCH", "/deactivate", {})],
+    [
+        ("GET", "", {}),
+        ("PUT", "", {"json": RICE}),
+        ("PATCH", "/deactivate", {}),
+        ("PATCH", "/reactivate", {}),
+    ],
 )
 async def test_product_of_another_store_is_not_found(
     client, admin, other_admin, method, path, send
