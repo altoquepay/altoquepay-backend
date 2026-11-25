@@ -14,6 +14,11 @@ def test_te7d_matches_the_report():
     assert Rate(te7d(TEA_75_PERCENT)).percent == Decimal("1.0940836")
 
 
+def test_period_rates_have_7_decimals_as_a_percentage():
+    assert te7d(TEA_75_PERCENT) == Decimal("0.010940836")
+    assert tep(TEA_75_PERCENT, 42) == Decimal("0.067466953")
+
+
 def test_tep_capitalizes_the_grace_period_of_the_report():
     capitalized_balance = Decimal("350.00") * (1 + tep(TEA_75_PERCENT, 11))
     assert Money(capitalized_balance).amount == Decimal("356.04")

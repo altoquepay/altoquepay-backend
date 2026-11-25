@@ -5,6 +5,7 @@ Every amount is rounded to cents as soon as it is produced, so what is stored is
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
 
 from app.shared.domain.finance import INSTALLMENT_PERIOD_DAYS, te7d, tep
 from app.shared.domain.value_objects import Money, Rate
@@ -37,7 +38,9 @@ def french_schedule(
     """Return the constant weekly installments, the k-th due on the cycle payment date + 7k days.
 
     Each interest is rounded to cents and the amortization is the installment minus it. The last
-    installment amortizes whatever is left, so it may differ from the others by a few cents.
+    installment amortizes whatever is left and its interest takes the cents lost to rounding, so
+    every installment is equal. Only when that interest is too small to take them, as with no
+    interest at all, is the last installment a few cents larger.
     """
     rate = te7d(tea)
     if rate:
@@ -47,8 +50,12 @@ def french_schedule(
     rows = []
     balance = principal.amount
     for number in range(1, count + 1):
-        interest = Money(balance * rate).amount
-        amortization = balance if number == count else installment - interest
+        if number == count:
+            amortization = balance
+            interest = max(installment - balance, Decimal(0))
+        else:
+            interest = Money(balance * rate).amount
+            amortization = installment - interest
         rows.append(
             ScheduleRow(
                 number=number,
