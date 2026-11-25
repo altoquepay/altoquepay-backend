@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-24
+
+No new migrations, and no routes or fields change. The last installment of a new weekly purchase, and so its total, may differ by a few cents from what 0.8.0 calculated.
+
+### Changed
+- **Credit**: every installment of a weekly purchase is equal. Before, the last one amortized whatever was left and kept its own interest, so it differed from the others by a few cents: in the report's test N°3 it was 109.69 after three of 109.68. Its interest now takes the cents lost to rounding. Every row still adds up and the schedule closes at 0.00.
+- **Credit and Billing**: the rate of a period is calculated with the 7 decimals it is shown with, instead of 28 digits. It applies to the installments, the grace period, single date purchases, late interest and early payments.
+
+### Known gaps
+- The last installment is still a few cents larger when its interest is too small to take the cents lost to rounding: with a TEA of 0%, or in very small purchases.
+- Purchases registered before 0.9.0 keep the schedule they were registered with.
+- Still open from 0.8.0: phones saved before 0.8.0 are not checked until their account or store profile is edited.
+- Still open from 0.7.1: Run workflow can only roll back to versions the workflow published, from 0.7.1 on.
+- Still open from 0.7.0: the compose in `deploy` makes no backups of its own, paying a voided purchase answers `ALREADY_PAID` (409), and the 0.5.0 lockouts still need the system administrator.
+
 ## [0.8.0] - 2026-11-22
 
 No new migrations. A phone with letters or symbols, which the API accepted before, now answers `INVALID_PHONE` (422).
