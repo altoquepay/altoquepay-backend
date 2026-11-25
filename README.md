@@ -123,7 +123,7 @@ Done once per server:
 2. Copy the `deploy` folder of a release from your machine. The server needs no access to the repository:
 
    ```bash
-   git archive v0.8.0 deploy | ssh ubuntu@<server> 'mkdir -p altoquepay && tar -x -C altoquepay'
+   git archive v0.9.0 deploy | ssh ubuntu@<server> 'mkdir -p altoquepay && tar -x -C altoquepay'
    ```
 
 3. On the server, create `altoquepay/deploy/.env` from `deploy/.env.example` and fill it in.

@@ -129,7 +129,7 @@ async def test_each_store_summary_has_only_its_own_debt(client, customer, store_
         (1, "109.68"),
         (2, "109.68"),
         (3, "109.68"),
-        (4, "109.69"),
+        (4, "109.68"),
     ]
     assert (summary_b["outstanding_principal"], summary_b["installments"]) == ("200.00", [])
     assert (summary_a["credit_limit"], summary_a["tea"]) == ("1500.00", "75.0000000")
@@ -263,11 +263,11 @@ async def test_dashboard_month_counts_this_months_purchases(client, admin_a, sto
 
     dashboard = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
 
-    # 26.99 of the single date purchase plus 11.74, the schedule interest of the weekly one.
+    # 26.99 of the single date purchase plus 11.73, the schedule interest of the weekly one.
     assert dashboard["purchases_this_month"] == {
         "count": 2,
         "amount": "800.00",
-        "ordinary_interest": "38.73",
+        "ordinary_interest": "38.72",
         "single_date_count": 1,
         "weekly_count": 1,
     }

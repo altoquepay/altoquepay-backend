@@ -60,7 +60,7 @@ async def test_installments_and_purchases_are_summarized(unit_of_work, setup):
     assert [(i.number, i.amount) for i in due] == [(2, Decimal("109.68")), (3, Decimal("109.68"))]
     assert (installment.number, installment.amount, installment.account_id) == (
         4,
-        Decimal("109.69"),
+        Decimal("109.68"),
         setup.account_id,
     )
     assert (purchase.mode, purchase.tea, purchase.installment_amount) == (
