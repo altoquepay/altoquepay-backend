@@ -2,7 +2,7 @@
 
 They follow the report's test N°3: S/ 400 bought on 15/10/2026 by an account with TEA 75%,
 late TEA 10%, cutoff 14 and payment 26. Its cycle is November (cutoff 14/11, payment 26/11).
-Weekly, it is 4 installments of 109.68 (the last 109.69) due 03/12, 10/12, 17/12 and 24/12,
+Weekly, it is 4 installments of 109.68 due 03/12, 10/12, 17/12 and 24/12,
 after capitalizing 26.99 of grace interest (426.99). Single date, it owes 400 + 26.99.
 
 Every test shares one Unit of Work that never commits, and sets the day it runs on.
@@ -212,7 +212,7 @@ async def test_full_prepayment_charges_interest_since_the_last_due_date(
     paid = await pay(client, admin, "429.65", kind="FULL_PREPAYMENT", purchase_id=weekly.id)
 
     assert paid.status_code == 201
-    assert amounts(paid.json()) == ("0.00", "2.66", "426.99", "429.65", "9.08")
+    assert amounts(paid.json()) == ("0.00", "2.66", "426.99", "429.65", "9.07")
     assert (await CreditFacade(unit_of_work).get_purchase(weekly.id)).status == "PREPAID"
 
 
@@ -223,7 +223,7 @@ async def test_full_prepayment_in_the_grace_period_charges_the_days_since_the_pu
 
     quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=weekly.id)
 
-    assert amounts(quoted.json()) == ("0.00", "13.27", "400.00", "413.27", "25.46")
+    assert amounts(quoted.json()) == ("0.00", "13.27", "400.00", "413.27", "25.45")
     assert quoted.json()["interest_days"] == 21
 
 

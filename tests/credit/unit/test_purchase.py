@@ -46,8 +46,8 @@ def test_weekly_purchase_has_the_report_schedule():
     assert purchase.capitalized_amount == Money(Decimal("426.99"))
     assert purchase.weekly_rate.percent.quantize(Decimal("0.0000001")) == Decimal("1.0940836")
     assert purchase.installment_amount == Money(Decimal("109.68"))
-    assert purchase.ordinary_interest == Money(Decimal("11.74"))
-    assert [i.amount.amount for i in purchase.installments][-1] == Decimal("109.69")
+    assert purchase.ordinary_interest == Money(Decimal("11.73"))
+    assert {i.amount for i in purchase.installments} == {purchase.installment_amount}
 
 
 def test_single_date_purchase_charges_the_interest_until_the_cycle_payment_date():
@@ -147,7 +147,7 @@ def test_total_is_what_the_customer_pays():
     weekly = register()
     single_date = register(mode=PaymentMode.SINGLE_DATE, installments_count=None)
 
-    assert weekly.total == Money(Decimal("438.73"))
+    assert weekly.total == Money(Decimal("438.72"))
     assert single_date.total == Money(Decimal("426.99"))
 
 

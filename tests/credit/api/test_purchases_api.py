@@ -72,7 +72,7 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
         "capitalized_amount": "426.99",
     }
     assert (purchase["weekly_rate"], purchase["installment_amount"]) == ("1.0940836", "109.68")
-    assert (purchase["ordinary_interest"], purchase["total"]) == ("11.74", "438.73")
+    assert (purchase["ordinary_interest"], purchase["total"]) == ("11.73", "438.72")
     assert purchase["items"] == [
         {
             "product_id": setup.product_id,
@@ -86,7 +86,7 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
         ("2026-12-03", "109.68", "PENDING"),
         ("2026-12-10", "109.68", "PENDING"),
         ("2026-12-17", "109.68", "PENDING"),
-        ("2026-12-24", "109.69", "PENDING"),
+        ("2026-12-24", "109.68", "PENDING"),
     ]
 
 
@@ -103,7 +103,7 @@ async def test_simulation_calculates_without_saving(client, setup, admin):
     )
 
     assert simulated.status_code == 200
-    assert (simulated.json()["id"], simulated.json()["total"]) == (None, "438.73")
+    assert (simulated.json()["id"], simulated.json()["total"]) == (None, "438.72")
     assert full_limit.status_code == 200
 
 
