@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-11-27
+
+No new migrations, and no routes or fields change.
+
+### Fixed
+- **Deploy**: CORS accepts the frontend published on Firebase Hosting, `https://altoquepay-frontend.web.app` and `https://altoquepay-frontend.firebaseapp.com`, and the password reset links point to `https://altoquepay-frontend.web.app`. Both values are set in `deploy/compose.yml`, so every deploy applies them; the server's `.env` no longer sets them.
+
 ## [0.9.0] - 2026-11-24
 
 No new migrations, and no routes or fields change. The last installment of a new weekly purchase, and so its total, may differ by a few cents from what 0.8.0 calculated.
