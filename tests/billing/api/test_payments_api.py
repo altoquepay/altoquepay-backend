@@ -1,9 +1,9 @@
 """Tests for the payment and cycle endpoints against the migrated PostgreSQL database.
 
 They follow the report's test N°3: S/ 400 bought on 15/10/2026 by an account with TEA 75%,
-late TEA 10%, cutoff 14 and payment 26. Its cycle is November (cutoff 14/11, payment 26/11).
-Weekly, it is 4 installments of 109.68 due 03/12, 10/12, 17/12 and 24/12,
-after capitalizing 26.99 of grace interest (426.99). Single date, it owes 400 + 26.99.
+late TEA 90%, cutoff 14 and payment 26. Its cycle is November (cutoff 14/11, payment 26/11).
+Weekly without grace, it is 4 installments of 102.75 due every 7 days from the purchase:
+22/10, 29/10, 05/11 and 12/11. Single date, it owes 400 + 26.99 on 26/11.
 
 Every test shares one Unit of Work that never commits, and sets the day it runs on.
 """
@@ -81,15 +81,15 @@ def amounts(body) -> tuple[str, str, str, str, str]:
 async def test_installment_paid_on_its_due_date_has_no_late_interest(
     client, admin, weekly, unit_of_work
 ):
-    on(date(2026, 12, 3))
+    on(date(2026, 10, 22))
     first = weekly.installments[0].id
 
     quoted = await quote(client, admin, kind="INSTALLMENT", installment_id=first)
-    paid = await pay(client, admin, "109.68", kind="INSTALLMENT", installment_id=first)
+    paid = await pay(client, admin, "102.75", kind="INSTALLMENT", installment_id=first)
 
-    assert amounts(quoted.json()) == ("0.00", "4.67", "105.01", "109.68", "0.00")
+    assert amounts(quoted.json()) == ("0.00", "4.38", "98.37", "102.75", "0.00")
     assert paid.status_code == 201
-    assert (paid.json()["kind"], paid.json()["paid_on"]) == ("INSTALLMENT", "2026-12-03")
+    assert (paid.json()["kind"], paid.json()["paid_on"]) == ("INSTALLMENT", "2026-10-22")
     installment = await CreditFacade(unit_of_work).get_installment(first)
     assert installment.status == "PAID"
 
@@ -97,34 +97,35 @@ async def test_installment_paid_on_its_due_date_has_no_late_interest(
 async def test_late_installment_pays_late_interest_first_and_no_partial_payment(
     client, admin, weekly
 ):
-    on(date(2026, 12, 6))
+    on(date(2026, 10, 25))
     first = weekly.installments[0].id
 
     quoted = await quote(client, admin, kind="INSTALLMENT", installment_id=first)
-    partial = await pay(client, admin, "109.68", kind="INSTALLMENT", installment_id=first)
-    paid = await pay(client, admin, "109.77", kind="INSTALLMENT", installment_id=first)
+    partial = await pay(client, admin, "102.75", kind="INSTALLMENT", installment_id=first)
+    paid = await pay(client, admin, "103.30", kind="INSTALLMENT", installment_id=first)
 
-    assert amounts(quoted.json()) == ("0.09", "4.67", "105.01", "109.77", "0.00")
+    # 102.75 x ((1 + 90%)^(3/360) - 1) = 0.55: the annual late rate, charged by the day.
+    assert amounts(quoted.json()) == ("0.55", "4.38", "98.37", "103.30", "0.00")
     assert quoted.json()["days_late"] == 3
     assert (partial.status_code, partial.json()["code"]) == (422, "PARTIAL_PAYMENT_NOT_ALLOWED")
-    assert amounts(paid.json()) == ("0.09", "4.67", "105.01", "109.77", "0.00")
+    assert amounts(paid.json()) == ("0.55", "4.38", "98.37", "103.30", "0.00")
 
 
 async def test_installment_advance_pays_the_full_installment_in_order(client, admin, weekly):
-    on(date(2026, 12, 1))
+    on(date(2026, 10, 20))
     first, second = weekly.installments[0].id, weekly.installments[1].id
 
     out_of_order = await quote(client, admin, kind="INSTALLMENT_ADVANCE", installment_id=second)
     not_due = await quote(client, admin, kind="INSTALLMENT", installment_id=first)
-    paid = await pay(client, admin, "109.68", kind="INSTALLMENT_ADVANCE", installment_id=first)
-    again = await pay(client, admin, "109.68", kind="INSTALLMENT_ADVANCE", installment_id=first)
+    paid = await pay(client, admin, "102.75", kind="INSTALLMENT_ADVANCE", installment_id=first)
+    again = await pay(client, admin, "102.75", kind="INSTALLMENT_ADVANCE", installment_id=first)
 
     assert (out_of_order.status_code, out_of_order.json()["code"]) == (
         409,
         "INSTALLMENT_OUT_OF_ORDER",
     )
     assert (not_due.json()["code"], not_due.json()["field"]) == ("PAYMENT_KIND_MISMATCH", "kind")
-    assert amounts(paid.json()) == ("0.00", "4.67", "105.01", "109.68", "0.00")
+    assert amounts(paid.json()) == ("0.00", "4.38", "98.37", "102.75", "0.00")
     assert (again.status_code, again.json()["code"]) == (409, "ALREADY_PAID")
 
 
@@ -161,17 +162,18 @@ async def test_cycle_statement_is_paid_once_closed_with_late_interest_after_its_
     on_time = await quote(client, admin, kind="CYCLE_STATEMENT", cycle_id=cycle_id)
     on(date(2026, 11, 29))
     late = await quote(client, admin, kind="CYCLE_STATEMENT", cycle_id=cycle_id)
-    paid = await pay(client, admin, "427.33", kind="CYCLE_STATEMENT", cycle_id=cycle_id)
+    paid = await pay(client, admin, "429.28", kind="CYCLE_STATEMENT", cycle_id=cycle_id)
     statement = await client.get(
         f"/api/v1/customers/{setup.account_id}/cycles/2026/11", headers=admin
     )
 
     assert (still_open.status_code, still_open.json()["code"]) == (409, "CYCLE_NOT_CLOSED")
     assert amounts(on_time.json()) == ("0.00", "26.99", "400.00", "426.99", "0.00")
-    assert amounts(late.json()) == ("0.34", "26.99", "400.00", "427.33", "0.00")
+    # 426.99 x ((1 + 90%)^(3/360) - 1) = 2.29 of late interest.
+    assert amounts(late.json()) == ("2.29", "26.99", "400.00", "429.28", "0.00")
     assert paid.status_code == 201
     body = statement.json()
-    assert (body["status"], body["late_interest"], body["total"]) == ("PAID", "0.34", "427.33")
+    assert (body["status"], body["late_interest"], body["total"]) == ("PAID", "2.29", "429.28")
     assert [p["status"] for p in body["purchases"]] == ["PAID"]
 
 
@@ -183,7 +185,7 @@ async def test_overdue_statement_shows_the_late_interest_to_date(client, admin, 
     )
     overdue = await client.get("/api/v1/cycles?status=OVERDUE", headers=admin)
 
-    assert (statement.json()["status"], statement.json()["late_interest"]) == ("OVERDUE", "0.34")
+    assert (statement.json()["status"], statement.json()["late_interest"]) == ("OVERDUE", "2.29")
     assert [cycle["id"] for cycle in overdue.json()["items"]] == [single_date.cycle_id]
 
 
@@ -206,29 +208,33 @@ async def test_statement_downloads_as_a_pdf(client, admin, setup, single_date):
 async def test_full_prepayment_charges_interest_since_the_last_due_date(
     client, admin, weekly, unit_of_work
 ):
-    # After the cycle payment date (26/11), 4 days into the first installment.
-    on(date(2026, 11, 30))
+    on(date(2026, 10, 22))
+    await pay(client, admin, "102.75", kind="INSTALLMENT", installment_id=weekly.installments[0].id)
+    # 4 days after the first installment: the 301.63 left plus its interest since then.
+    on(date(2026, 10, 26))
 
-    paid = await pay(client, admin, "429.65", kind="FULL_PREPAYMENT", purchase_id=weekly.id)
+    paid = await pay(client, admin, "303.51", kind="FULL_PREPAYMENT", purchase_id=weekly.id)
 
     assert paid.status_code == 201
-    assert amounts(paid.json()) == ("0.00", "2.66", "426.99", "429.65", "9.07")
+    assert amounts(paid.json()) == ("0.00", "1.88", "301.63", "303.51", "4.74")
     assert (await CreditFacade(unit_of_work).get_purchase(weekly.id)).status == "PREPAID"
 
 
-async def test_full_prepayment_in_the_grace_period_charges_the_days_since_the_purchase(
-    client, admin, weekly
+async def test_full_prepayment_in_the_grace_weeks_charges_the_days_since_the_purchase(
+    client, admin, setup, unit_of_work
 ):
-    on(date(2026, 11, 5))
+    # 1 week of grace, then 3 installments of 137.75 from 29/10.
+    graced = await add_purchase(unit_of_work, setup, installments_count=3, grace_weeks=1)
+    on(date(2026, 10, 20))
 
-    quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=weekly.id)
+    quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=graced.id)
 
-    assert amounts(quoted.json()) == ("0.00", "13.27", "400.00", "413.27", "25.45")
-    assert quoted.json()["interest_days"] == 21
+    assert amounts(quoted.json()) == ("0.00", "3.12", "400.00", "403.12", "10.13")
+    assert quoted.json()["interest_days"] == 5
 
 
 async def test_full_prepayment_is_rejected_with_an_overdue_installment(client, admin, weekly):
-    on(date(2026, 12, 5))
+    on(date(2026, 10, 24))
 
     quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=weekly.id)
 
@@ -262,7 +268,7 @@ async def test_a_prepayment_is_for_weekly_purchases(client, admin, single_date):
 async def test_targets_of_another_store_are_not_found(client, weekly, unit_of_work):
     other = await add_credit_setup(unit_of_work, ruc="20999999991", dni="70000002")
     other_admin = authorization(sub=str(other.user_id), store_id=other.store_id)
-    on(date(2026, 12, 3))
+    on(date(2026, 10, 22))
 
     response = await quote(
         client, other_admin, kind="INSTALLMENT", installment_id=weekly.installments[0].id
@@ -278,15 +284,15 @@ async def test_targets_of_another_store_are_not_found(client, weekly, unit_of_wo
 
 
 async def test_payments_are_listed_most_recent_first(client, admin, setup, weekly, unit_of_work):
-    on(date(2026, 12, 3))
-    await pay(client, admin, "109.68", kind="INSTALLMENT", installment_id=weekly.installments[0].id)
-    on(date(2026, 12, 10))
-    await pay(client, admin, "109.68", kind="INSTALLMENT", installment_id=weekly.installments[1].id)
+    on(date(2026, 10, 22))
+    await pay(client, admin, "102.75", kind="INSTALLMENT", installment_id=weekly.installments[0].id)
+    on(date(2026, 10, 29))
+    await pay(client, admin, "102.75", kind="INSTALLMENT", installment_id=weekly.installments[1].id)
 
     listed = await client.get("/api/v1/payments", headers=admin)
-    filtered = await client.get("/api/v1/payments?from=2026-12-05", headers=admin)
+    filtered = await client.get("/api/v1/payments?from=2026-10-25", headers=admin)
 
-    assert [p["paid_on"] for p in listed.json()["items"]] == ["2026-12-10", "2026-12-03"]
+    assert [p["paid_on"] for p in listed.json()["items"]] == ["2026-10-29", "2026-10-22"]
     assert filtered.json()["total"] == 1
     summaries = await BillingFacade(unit_of_work).list_payments(setup.account_id)
-    assert [s.paid_on for s in summaries] == [date(2026, 12, 10), date(2026, 12, 3)]
+    assert [s.paid_on for s in summaries] == [date(2026, 10, 29), date(2026, 10, 22)]
