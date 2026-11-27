@@ -22,7 +22,7 @@ async def test_default_conditions_are_percentages(unit_of_work):
 
     conditions = await StoresFacade(unit_of_work).get_default_conditions(store.id)
 
-    assert conditions == DefaultConditions(10, 15, Decimal("40"), Decimal("15"), 4)
+    assert conditions == DefaultConditions(10, 15, Decimal("40"), Decimal("60"), 4)
 
 
 @pytest.mark.parametrize("method", ["get_store_status", "get_default_conditions"])
