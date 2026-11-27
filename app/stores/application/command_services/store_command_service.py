@@ -19,9 +19,15 @@ class StoreCommandService:
         self._unit_of_work = unit_of_work
 
     async def update_profile(self, command: UpdateStoreProfileCommand, today: date) -> Store:
-        """Save the profile once its default rates respect the BCRP caps in force today."""
+        """Save the profile once the late rate is above the TEA and the TEA is within the cap."""
         store = await self._find(command.store_id)
         conditions = command.default_conditions
+        try:
+            conditions.ensure_late_above_ordinary()
+        except BusinessError as error:
+            # The store profile names its rates default_*.
+            error.field = "default_late_tea"
+            raise
         await self._rate_caps.check(conditions.tea, conditions.late_tea, today)
         store.update_profile(command.business_name, command.address, command.phone, conditions)
         return await self._save(store)

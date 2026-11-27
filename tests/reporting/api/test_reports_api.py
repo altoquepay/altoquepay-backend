@@ -1,7 +1,7 @@
 """Tests for the customer portal, the dashboard and the report against the migrated database.
 
 One customer has accounts in two stores. Store A sold them the report's test N°3 both ways on
-15/10/2026: S/ 400 in 4 weekly installments (426.99 after grace) and S/ 400 on a single date
+15/10/2026: S/ 400 in 4 weekly installments of 102.75 from 22/10 and S/ 400 on a single date
 (26.99 of interest, cycle of November). Store B sold them S/ 200 on a single date.
 
 Every test shares one Unit of Work that never commits, and sets the day it runs on.
@@ -122,14 +122,14 @@ async def test_each_store_summary_has_only_its_own_debt(client, customer, store_
     ).json()
 
     assert (summary_a["outstanding_principal"], summary_a["available_credit"]) == (
-        "826.99",
-        "673.01",
+        "800.00",
+        "700.00",
     )
     assert [(i["number"], i["amount"]) for i in summary_a["installments"]] == [
-        (1, "109.68"),
-        (2, "109.68"),
-        (3, "109.68"),
-        (4, "109.68"),
+        (1, "102.75"),
+        (2, "102.75"),
+        (3, "102.75"),
+        (4, "102.75"),
     ]
     assert (summary_b["outstanding_principal"], summary_b["installments"]) == ("200.00", [])
     assert (summary_a["credit_limit"], summary_a["tea"]) == ("1500.00", "75.0000000")
@@ -183,10 +183,10 @@ async def test_purchases_and_schedules_stay_in_their_store(client, customer, sto
     assert sorted(p["amount"] for p in purchases_a) == ["400.00", "400.00"]
     assert [p["amount"] for p in purchases_b] == ["200.00"]
     assert [i["due_date"] for i in schedule.json()["installments"]] == [
-        "2026-12-03",
-        "2026-12-10",
-        "2026-12-17",
-        "2026-12-24",
+        "2026-10-22",
+        "2026-10-29",
+        "2026-11-05",
+        "2026-11-12",
     ]
     assert crossed.status_code == 404
 
@@ -214,17 +214,17 @@ async def test_statement_of_the_month(client, customer, store_a, on):
 async def test_dashboard_counts_overdue_installments_statements_and_the_cap(
     client, admin_a, store_a, on
 ):
-    on(date(2026, 12, 5))
+    on(date(2026, 11, 27))
 
     dashboard = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
 
-    assert (dashboard["active_customers"], dashboard["outstanding_principal"]) == (1, "826.99")
-    # Installment 1 (109.68, due 3/12) and the November statement (426.99, due 26/11).
+    assert (dashboard["active_customers"], dashboard["outstanding_principal"]) == (1, "800.00")
+    # The 4 installments of 102.75 (due by 12/11) and the November statement (426.99, 26/11).
     assert (
         dashboard["overdue_installments"],
         dashboard["overdue_statements"],
         dashboard["overdue_amount"],
-    ) == (1, 1, "536.67")
+    ) == (4, 1, "837.99")
     assert dashboard["purchases_this_month"]["count"] == 0
     assert dashboard["bcrp_cap"]["max_tea"] == "114.6800000"
 
@@ -236,12 +236,17 @@ async def test_dashboard_lists_what_falls_due_this_week_and_the_next_cutoff(
     await add_purchase(
         unit_of_work, store_a, datetime(2026, 11, 20, 9, tzinfo=LIMA), PaymentMode.SINGLE_DATE, 1
     )
+    on(date(2026, 10, 20))
+    first_installment_week = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
     on(date(2026, 11, 26))
     payment_day = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
-    on(date(2026, 12, 3))
-    first_installment_day = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
 
-    # On 26/11 the November statement falls due; installment 1 (3/12) is still 7 days away.
+    # On 20/10 installment 1 falls due on 22/10, and November's cutoff is the next one.
+    assert [
+        (due["type"], due["due_date"], due["amount"]) for due in first_installment_week["upcoming"]
+    ] == [("INSTALLMENT", "2026-10-22", "102.75")]
+    assert first_installment_week["next_cutoff"] == "2026-11-14"
+    # On 26/11 the November statement falls due; every installment is already past due.
     assert payment_day["upcoming"] == [
         {
             "type": "CYCLE",
@@ -251,11 +256,7 @@ async def test_dashboard_lists_what_falls_due_this_week_and_the_next_cutoff(
             "amount": "426.99",
         }
     ]
-    # On 3/12 the November statement is overdue, so it is no longer upcoming.
-    assert [
-        (due["type"], due["due_date"], due["amount"]) for due in first_installment_day["upcoming"]
-    ] == [("INSTALLMENT", "2026-12-03", "109.68")]
-    assert payment_day["next_cutoff"] == first_installment_day["next_cutoff"] == "2026-12-14"
+    assert payment_day["next_cutoff"] == "2026-12-14"
 
 
 async def test_dashboard_month_counts_this_months_purchases(client, admin_a, store_a, on):
@@ -263,48 +264,49 @@ async def test_dashboard_month_counts_this_months_purchases(client, admin_a, sto
 
     dashboard = (await client.get("/api/v1/dashboard", headers=admin_a)).json()
 
-    # 26.99 of the single date purchase plus 11.73, the schedule interest of the weekly one.
+    # 26.99 of the single date purchase plus 11.00, the schedule interest of the weekly one.
     assert dashboard["purchases_this_month"] == {
         "count": 2,
         "amount": "800.00",
-        "ordinary_interest": "38.72",
+        "ordinary_interest": "37.99",
         "single_date_count": 1,
         "weekly_count": 1,
     }
 
 
 async def test_report_adds_up_purchases_and_payments_of_the_period(client, admin_a, store_a, on):
-    on(date(2026, 12, 3))
+    on(date(2026, 10, 22))
     installments = (
         await client.get("/api/v1/installments?status=PENDING", headers=admin_a)
     ).json()["items"]
     first = next(i for i in installments if i["number"] == 1)
     paid = await client.post(
         "/api/v1/payments",
-        json={"kind": "INSTALLMENT", "installment_id": first["id"], "amount": "109.68"},
+        json={"kind": "INSTALLMENT", "installment_id": first["id"], "amount": "102.75"},
         headers=admin_a,
     )
 
     october = await client.get(
         "/api/v1/reports/summary?from=2026-10-01&to=2026-10-31", headers=admin_a
     )
-    december = await client.get(
-        "/api/v1/reports/summary?from=2026-12-01&to=2026-12-31", headers=admin_a
+    november = await client.get(
+        "/api/v1/reports/summary?from=2026-11-01&to=2026-11-30", headers=admin_a
     )
     reversed_range = await client.get(
         "/api/v1/reports/summary?from=2026-12-31&to=2026-12-01", headers=admin_a
     )
 
     assert paid.status_code == 201
-    assert (october.json()["purchases"]["count"], october.json()["payments"]["count"]) == (2, 0)
-    assert december.json()["payments"] == {
+    assert october.json()["purchases"]["count"] == 2
+    assert october.json()["payments"] == {
         "count": 1,
-        "total": "109.68",
-        "principal": "105.01",
-        "ordinary_interest": "4.67",
+        "total": "102.75",
+        "principal": "98.37",
+        "ordinary_interest": "4.38",
         "late_interest": "0.00",
         "savings": "0.00",
     }
+    assert (november.json()["purchases"]["count"], november.json()["payments"]["count"]) == (0, 0)
     assert (reversed_range.json()["code"], reversed_range.json()["field"]) == (
         "INVALID_DATE_RANGE",
         "to",

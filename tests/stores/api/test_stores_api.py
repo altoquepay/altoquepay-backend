@@ -55,7 +55,7 @@ PROFILE = {
     "default_cutoff_day": 20,
     "default_payment_day": 26,
     "default_tea": "114.68",
-    "default_late_tea": "17.202",
+    "default_late_tea": "150",
     "default_max_weeks": 8,
 }
 
@@ -76,7 +76,7 @@ async def test_registered_store_starts_with_the_initial_conditions(client):
         "default_cutoff_day": 10,
         "default_payment_day": 15,
         "default_tea": "40.0000000",
-        "default_late_tea": "15.0000000",
+        "default_late_tea": "60.0000000",
         "default_max_weeks": 4,
     }
 
@@ -129,7 +129,7 @@ async def test_administrator_reads_and_updates_their_store_profile(client):
     assert profile.json()["ruc"] == REGISTRATION["ruc"]
     assert {key: profile.json()[key] for key in PROFILE} == PROFILE | {
         "default_tea": "114.6800000",
-        "default_late_tea": "17.2020000",
+        "default_late_tea": "150.0000000",
     }
 
 
@@ -152,7 +152,7 @@ async def test_each_administrator_sees_only_their_own_store(client):
         ({"default_payment_day": 20}, "PAYMENT_DAY_NOT_AFTER_CUTOFF", "default_payment_day"),
         ({"default_max_weeks": 100}, "INVALID_MAX_WEEKS", "default_max_weeks"),
         ({"default_tea": "114.69"}, "RATE_ABOVE_BCRP_CAP", "default_tea"),
-        ({"default_late_tea": "17.21"}, "RATE_ABOVE_BCRP_CAP", "default_late_tea"),
+        ({"default_late_tea": "114.68"}, "LATE_TEA_NOT_ABOVE_TEA", "default_late_tea"),
         ({"default_tea": "-1"}, "VALIDATION_ERROR", "default_tea"),
         ({"phone": "abcdefgh"}, "INVALID_PHONE", "phone"),
     ],

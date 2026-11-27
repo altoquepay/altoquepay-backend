@@ -30,23 +30,21 @@ class RegulationFacade:
         self._query_service = BcrpCapQueryService(BcrpCapRepositoryImpl(unit_of_work.session))
 
     async def validate_rates(self, tea: Decimal, late_tea: Decimal, on_date: date) -> None:
-        """Raise RATE_ABOVE_BCRP_CAP (422), on the tea or late_tea field, if a rate is too high.
+        """Raise RATE_ABOVE_BCRP_CAP (422) on the tea field if the TEA is above the cap.
 
-        A rate equal to the cap is allowed. Raises NO_BCRP_CAP_IN_FORCE (409) if there is no cap.
+        The late rate is not capped by the BCRP: it is only required to be above the TEA, which
+        CreditConditions checks. A TEA equal to the cap is allowed. Raises NO_BCRP_CAP_IN_FORCE
+        (409) if there is no cap.
         """
         cap = await self.get_current_cap(on_date)
-        for field, rate, maximum in (
-            ("tea", tea, cap.max_tea),
-            ("late_tea", late_tea, cap.max_late_tea),
-        ):
-            if rate > maximum:
-                readable_maximum = f"{maximum.normalize():f}"
-                raise BusinessError(
-                    "RATE_ABOVE_BCRP_CAP",
-                    f"The rate exceeds the BCRP legal cap (max {readable_maximum}%).",
-                    field=field,
-                    details={"max": readable_maximum},
-                )
+        if tea > cap.max_tea:
+            readable_maximum = f"{cap.max_tea.normalize():f}"
+            raise BusinessError(
+                "RATE_ABOVE_BCRP_CAP",
+                f"The rate exceeds the BCRP legal cap (max {readable_maximum}%).",
+                field="tea",
+                details={"max": readable_maximum},
+            )
 
     async def get_current_cap(self, on_date: date) -> CurrentCap:
         """Return the cap in force on a date. Raises NO_BCRP_CAP_IN_FORCE (409) if there is none."""

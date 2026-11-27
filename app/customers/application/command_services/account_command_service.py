@@ -69,6 +69,7 @@ class AccountCommandService:
         The account starts out of the customer's portal, with an access code to link it.
         """
         conditions = await self._conditions_with_defaults(command)
+        conditions.ensure_late_above_ordinary()
         await self._rate_caps.check(conditions.tea, conditions.late_tea, today)
         customer = await self._find_or_create_customer(command)
         if customer.id is None:
@@ -101,6 +102,7 @@ class AccountCommandService:
         """Replace the store's data of the person and the account terms. The DNI never changes."""
         found = await self._query.get(command.store_id, command.account_id)
         conditions = command.conditions
+        conditions.ensure_late_above_ordinary()
         await self._rate_caps.check(conditions.tea, conditions.late_tea, today)
         found.account.update_contact(
             command.first_names, command.last_names, command.phone, command.address

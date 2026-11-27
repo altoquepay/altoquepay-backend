@@ -17,7 +17,7 @@ def test_a_new_store_is_active_with_the_initial_conditions():
     assert (store.business_name, store.status) == ("Bodega La Esquina", StoreStatus.ACTIVE)
     conditions = store.default_conditions
     assert (conditions.cutoff_day, conditions.payment_day, conditions.max_weeks) == (10, 15, 4)
-    assert (conditions.tea.percent, conditions.late_tea.percent) == (Decimal("40"), Decimal("15"))
+    assert (conditions.tea.percent, conditions.late_tea.percent) == (Decimal("40"), Decimal("60"))
 
 
 @pytest.mark.parametrize("invalid_name", ["", "   ", "x" * 151])

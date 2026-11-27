@@ -15,7 +15,7 @@ INITIAL_CONDITIONS = CreditConditions(
     cutoff_day=10,
     payment_day=15,
     tea=Rate.from_percent(Decimal("40")),
-    late_tea=Rate.from_percent(Decimal("15")),
+    late_tea=Rate.from_percent(Decimal("60")),
     max_weeks=4,
 )
 

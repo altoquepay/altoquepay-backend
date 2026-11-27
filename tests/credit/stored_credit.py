@@ -62,6 +62,8 @@ async def add_purchase(
     purchased_at: datetime = datetime(2026, 10, 15, 12, tzinfo=LIMA),
     mode: PaymentMode = PaymentMode.WEEKLY,
     quantity: int = 4,
+    installments_count: int = 4,
+    grace_weeks: int = 0,
 ) -> Purchase:
     """Flush a purchase of the setup's product, by default report test N°3 (S/ 400, 4 weeks)."""
     # Registered on the day of the purchase, so its cycle still takes it.
@@ -78,20 +80,22 @@ async def add_purchase(
         mode=mode,
         items=[PurchaseItem(setup.product_id, quantity, Money(Decimal("100.00")))],
         tea=Rate.from_percent(Decimal("75")),
-        late_tea=Rate.from_percent(Decimal("10")),
-        installments_count=4 if mode == PaymentMode.WEEKLY else None,
+        late_tea=Rate.from_percent(Decimal("90")),
+        installments_count=installments_count if mode == PaymentMode.WEEKLY else None,
         max_weeks=4,
         created_by=setup.user_id,
+        grace_weeks=grace_weeks,
     )
     await PurchaseRepositoryImpl(unit_of_work.session).add(purchase)
     return purchase
 
 
+# Every 7 days from the purchase on 15/10/2026, without grace.
 DUE_DATES_OF_TEST_3 = [
-    date(2026, 12, 3),
-    date(2026, 12, 10),
-    date(2026, 12, 17),
-    date(2026, 12, 24),
+    date(2026, 10, 22),
+    date(2026, 10, 29),
+    date(2026, 11, 5),
+    date(2026, 11, 12),
 ]
 
 

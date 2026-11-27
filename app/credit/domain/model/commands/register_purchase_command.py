@@ -21,3 +21,5 @@ class RegisterPurchaseCommand:
     installments_count: int | None
     items: list[RequestedItem]
     created_by: int
+    # Weeks of total grace the store gives a weekly purchase before its installments.
+    grace_weeks: int = 0

@@ -16,8 +16,8 @@ from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Money, Rate
 
 
-def register(mode=PaymentMode.WEEKLY, installments_count=4, max_weeks=8, items=None):
-    """Report test N°3: S/ 400 bought on 15/10/2026, paid from the cycle of 26/11/2026."""
+def register(mode=PaymentMode.WEEKLY, installments_count=4, max_weeks=8, items=None, grace_weeks=0):
+    """Report test N°3: S/ 400 bought on 15/10/2026, in the cycle paid on 26/11/2026."""
     purchase = Purchase.register(
         store_id=1,
         account_id=2,
@@ -32,22 +32,75 @@ def register(mode=PaymentMode.WEEKLY, installments_count=4, max_weeks=8, items=N
         installments_count=installments_count,
         max_weeks=max_weeks,
         created_by=7,
+        grace_weeks=grace_weeks,
     )
     for number, installment in enumerate(purchase.installments, start=1):
         installment.id = 100 + number
     return purchase
 
 
-def test_weekly_purchase_has_the_report_schedule():
+def test_weekly_purchase_finances_its_amount_from_the_purchase_day():
     purchase = register()
 
+    # No interest is added before the first week: what is financed is what was bought.
     assert purchase.amount == Money(Decimal("400"))
-    assert (purchase.grace_days, purchase.term_days) == (42, None)
-    assert purchase.capitalized_amount == Money(Decimal("426.99"))
+    assert (purchase.grace_days, purchase.grace_weeks, purchase.term_days) == (0, 0, None)
+    assert purchase.capitalized_amount == Money(Decimal("400"))
     assert purchase.weekly_rate.percent.quantize(Decimal("0.0000001")) == Decimal("1.0940836")
-    assert purchase.installment_amount == Money(Decimal("109.68"))
-    assert purchase.ordinary_interest == Money(Decimal("11.73"))
+    assert purchase.installment_amount == Money(Decimal("102.75"))
+    assert purchase.ordinary_interest == Money(Decimal("11.00"))
     assert {i.amount for i in purchase.installments} == {purchase.installment_amount}
+    assert [i.due_date for i in purchase.installments] == [
+        date(2026, 10, 22),
+        date(2026, 10, 29),
+        date(2026, 11, 5),
+        date(2026, 11, 12),
+    ]
+    assert purchase.grace_rows() == []
+
+
+def test_grace_weeks_add_their_interest_and_raise_the_installments():
+    purchase = register(installments_count=3, grace_weeks=1)
+
+    # Week 1 pays nothing and adds 400 x TE7d = 4.38; the 4-week term stays, so the 3
+    # installments are higher than without grace.
+    assert (purchase.grace_days, purchase.grace_weeks) == (7, 1)
+    assert purchase.capitalized_amount == Money(Decimal("404.38"))
+    assert purchase.installment_amount == Money(Decimal("137.75"))
+    assert [i.due_date for i in purchase.installments] == [
+        date(2026, 10, 29),
+        date(2026, 11, 5),
+        date(2026, 11, 12),
+    ]
+    (grace,) = purchase.grace_rows()
+    assert (grace.number, grace.end_date) == (1, date(2026, 10, 22))
+    assert (grace.opening_balance, grace.interest, grace.closing_balance) == (
+        Money(Decimal("400")),
+        Money(Decimal("4.38")),
+        Money(Decimal("404.38")),
+    )
+
+
+@pytest.mark.parametrize(
+    ("count", "grace", "field"),
+    [(3, 2, "grace_weeks"), (6, 0, "installments_count")],
+)
+def test_installments_and_grace_weeks_stay_within_the_maximum_weeks(count, grace, field):
+    with pytest.raises(BusinessError) as error:
+        register(installments_count=count, grace_weeks=grace, max_weeks=4)
+
+    assert (error.value.code, error.value.field) == ("MAX_WEEKS_EXCEEDED", field)
+
+
+@pytest.mark.parametrize(
+    ("mode", "count", "grace"),
+    [(PaymentMode.SINGLE_DATE, None, 1), (PaymentMode.WEEKLY, 2, -1)],
+)
+def test_grace_weeks_are_weekly_and_not_negative(mode, count, grace):
+    with pytest.raises(BusinessError) as error:
+        register(mode=mode, installments_count=count, grace_weeks=grace)
+
+    assert (error.value.code, error.value.field) == ("INVALID_GRACE_WEEKS", "grace_weeks")
 
 
 def test_single_date_purchase_charges_the_interest_until_the_cycle_payment_date():
@@ -128,10 +181,10 @@ def test_single_date_purchase_is_paid_once():
 
 
 def test_pending_installment_past_its_due_date_shows_as_overdue():
-    installment = register().installments[0]  # due on 03/12/2026
+    installment = register().installments[0]  # due on 22/10/2026
 
-    assert installment.status_on(date(2026, 12, 3)) == InstallmentStatus.PENDING
-    assert installment.status_on(date(2026, 12, 4)) == InstallmentStatus.OVERDUE
+    assert installment.status_on(date(2026, 10, 22)) == InstallmentStatus.PENDING
+    assert installment.status_on(date(2026, 10, 23)) == InstallmentStatus.OVERDUE
 
 
 def test_a_product_goes_in_one_item_only():
@@ -147,7 +200,7 @@ def test_total_is_what_the_customer_pays():
     weekly = register()
     single_date = register(mode=PaymentMode.SINGLE_DATE, installments_count=None)
 
-    assert weekly.total == Money(Decimal("438.72"))
+    assert weekly.total == Money(Decimal("411.00"))
     assert single_date.total == Money(Decimal("426.99"))
 
 

@@ -161,3 +161,15 @@ class CreditConditions:
                 "The maximum number of weeks must be between 1 and 99.",
                 field="max_weeks",
             )
+
+    def ensure_late_above_ordinary(self) -> None:
+        """Raise unless the late rate is higher than the ordinary one: being late costs more.
+
+        Checked only when conditions are saved, so conditions stored before the rule still load.
+        """
+        if self.late_tea.fraction <= self.tea.fraction:
+            raise BusinessError(
+                "LATE_TEA_NOT_ABOVE_TEA",
+                "The late rate must be higher than the annual effective rate (TEA).",
+                field="late_tea",
+            )

@@ -142,3 +142,21 @@ def test_credit_conditions_reject_values_out_of_range(invalid_values, code, fiel
     with pytest.raises(BusinessError) as error:
         credit_conditions(**invalid_values)
     assert (error.value.code, error.value.field) == (code, field)
+
+
+@pytest.mark.parametrize(("tea", "late_tea"), [("40", "40"), ("75", "10")])
+def test_late_rate_must_be_above_the_tea_when_saved(tea, late_tea):
+    conditions = credit_conditions(
+        tea=Rate.from_percent(Decimal(tea)), late_tea=Rate.from_percent(Decimal(late_tea))
+    )
+
+    with pytest.raises(BusinessError) as error:
+        conditions.ensure_late_above_ordinary()
+
+    assert (error.value.code, error.value.field) == ("LATE_TEA_NOT_ABOVE_TEA", "late_tea")
+
+
+def test_late_rate_above_the_tea_has_no_upper_limit():
+    credit_conditions(
+        tea=Rate.from_percent(Decimal("40")), late_tea=Rate.from_percent(Decimal("150"))
+    ).ensure_late_above_ordinary()

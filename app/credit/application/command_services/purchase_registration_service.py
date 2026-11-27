@@ -73,6 +73,7 @@ class PurchaseRegistrationService:
             installments_count=command.installments_count,
             max_weeks=terms.max_weeks,
             created_by=command.created_by,
+            grace_weeks=command.grace_weeks,
         )
         active = await self._purchases.list_active_by_account(command.account_id)
         available = terms.credit_limit.amount - outstanding_principal_of(active).amount

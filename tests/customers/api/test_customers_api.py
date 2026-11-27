@@ -1,7 +1,7 @@
 """Tests for the customers endpoints against the migrated PostgreSQL database.
 
 Every test shares one Unit of Work that never commits, so what it creates disappears.
-New stores start with cutoff 10, payment 15, TEA 40%, late TEA 15% and 4 weeks.
+New stores start with cutoff 10, payment 15, TEA 40%, late TEA 60% and 4 weeks.
 """
 
 from datetime import UTC, date, datetime, timedelta
@@ -95,7 +95,7 @@ async def test_new_dni_gets_an_account_with_the_store_defaults_and_an_access_cod
         "cutoff_day": 10,
         "payment_day": 15,
         "tea": "40.0000000",
-        "late_tea": "15.0000000",
+        "late_tea": "60.0000000",
         "max_weeks": 4,
         "status": "ACTIVE",
         "portal_linked": False,
@@ -168,12 +168,12 @@ async def test_an_expired_or_replaced_code_is_refused(client, admin):
 
 async def test_given_conditions_replace_the_defaults(client, admin):
     response = await open_account(
-        client, admin, cutoff_day=20, payment_day=26, tea="75", late_tea="10", max_weeks=8
+        client, admin, cutoff_day=20, payment_day=26, tea="75", late_tea="90", max_weeks=8
     )
 
     account = response.json()["account"]
     assert (account["cutoff_day"], account["payment_day"], account["max_weeks"]) == (20, 26, 8)
-    assert (account["tea"], account["late_tea"]) == ("75.0000000", "10.0000000")
+    assert (account["tea"], account["late_tea"]) == ("75.0000000", "90.0000000")
 
 
 async def test_a_given_day_is_checked_against_the_default_ones(client, admin):
@@ -186,15 +186,28 @@ async def test_a_given_day_is_checked_against_the_default_ones(client, admin):
     )
 
 
-@pytest.mark.parametrize(
-    ("changes", "field"),
-    [({"tea": "114.69"}, "tea"), ({"late_tea": "17.21"}, "late_tea")],
-)
-async def test_rates_above_the_bcrp_cap_are_rejected(client, admin, changes, field):
-    response = await open_account(client, admin, **changes)
+async def test_tea_above_the_bcrp_cap_is_rejected(client, admin):
+    response = await open_account(client, admin, tea="114.69", late_tea="150")
 
     assert response.status_code == 422
-    assert (response.json()["code"], response.json()["field"]) == ("RATE_ABOVE_BCRP_CAP", field)
+    assert (response.json()["code"], response.json()["field"]) == ("RATE_ABOVE_BCRP_CAP", "tea")
+
+
+@pytest.mark.parametrize("late_tea", ["40", "17.21"])
+async def test_late_rate_must_be_above_the_tea(client, admin, late_tea):
+    response = await open_account(client, admin, late_tea=late_tea)
+
+    assert response.status_code == 422
+    assert (response.json()["code"], response.json()["field"]) == (
+        "LATE_TEA_NOT_ABOVE_TEA",
+        "late_tea",
+    )
+
+
+async def test_late_rate_is_not_capped_by_the_bcrp(client, admin):
+    response = await open_account(client, admin, late_tea="150")
+
+    assert (response.status_code, response.json()["account"]["late_tea"]) == (201, "150.0000000")
 
 
 async def test_repeated_dni_in_the_same_store_is_rejected(client, admin):
@@ -430,7 +443,7 @@ async def test_update_replaces_data_and_terms(client, admin):
         "cutoff_day": 20,
         "payment_day": 26,
         "tea": "75",
-        "late_tea": "10",
+        "late_tea": "90",
         "max_weeks": 8,
     }
 
@@ -457,7 +470,7 @@ async def test_what_a_store_edits_never_changes_the_account_of_another_store(
         "cutoff_day": 10,
         "payment_day": 15,
         "tea": "40",
-        "late_tea": "15",
+        "late_tea": "60",
         "max_weeks": 4,
     }
 
@@ -518,7 +531,7 @@ async def test_account_of_another_store_is_not_found(
             "cutoff_day": 10,
             "payment_day": 15,
             "tea": "40",
-            "late_tea": "15",
+            "late_tea": "60",
             "max_weeks": 4,
         }
 
