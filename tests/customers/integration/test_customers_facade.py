@@ -39,7 +39,7 @@ async def test_credit_terms_have_rates_in_percent(facade, unit_of_work):
         customer_id=customer.id,
         credit_limit=Decimal("1500.00"),
         tea=Decimal("75.0000000"),
-        late_tea=Decimal("10.0000000"),
+        late_tea=Decimal("90.0000000"),
         cutoff_day=20,
         payment_day=26,
         max_weeks=4,

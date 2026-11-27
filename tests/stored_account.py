@@ -36,7 +36,7 @@ async def add_account(
     status: AccountStatus = AccountStatus.ACTIVE,
     portal_linked: bool = True,
 ) -> StoreCustomer:
-    """Flush Rosa Quispe Mamani's account, at 75% TEA and 10% late TEA, without committing.
+    """Flush Rosa Quispe Mamani's account, at 75% TEA and 90% late TEA, without committing.
 
     It is in the customer's portal, and trusted, unless portal_linked is False.
     """
@@ -50,7 +50,7 @@ async def add_account(
             cutoff_day=cutoff_day,
             payment_day=payment_day,
             tea=Rate.from_percent(Decimal("75")),
-            late_tea=Rate.from_percent(Decimal("10")),
+            late_tea=Rate.from_percent(Decimal("90")),
             max_weeks=4,
         ),
         status=status,
