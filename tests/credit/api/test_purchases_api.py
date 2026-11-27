@@ -66,13 +66,17 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
 
     assert response.status_code == 201
     purchase = response.json()
-    assert {key: purchase[key] for key in ("amount", "grace_days", "capitalized_amount")} == {
+    # Without grace, the S/ 400 bought are financed as they are, from the purchase day.
+    keys = ("amount", "grace_days", "grace_weeks", "capitalized_amount")
+    assert {key: purchase[key] for key in keys} == {
         "amount": "400.00",
-        "grace_days": 42,
-        "capitalized_amount": "426.99",
+        "grace_days": 0,
+        "grace_weeks": 0,
+        "capitalized_amount": "400.00",
     }
-    assert (purchase["weekly_rate"], purchase["installment_amount"]) == ("1.0940836", "109.68")
-    assert (purchase["ordinary_interest"], purchase["total"]) == ("11.73", "438.72")
+    assert (purchase["weekly_rate"], purchase["installment_amount"]) == ("1.0940836", "102.75")
+    assert (purchase["ordinary_interest"], purchase["total"]) == ("11.00", "411.00")
+    assert purchase["grace_periods"] == []
     assert purchase["items"] == [
         {
             "product_id": setup.product_id,
@@ -81,13 +85,53 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
             "subtotal": "400.00",
         }
     ]
-    # Today is 16/11/2026, so no installment is overdue yet.
+    # Due every 7 days from the purchase; today is 16/11/2026, so all are overdue.
     assert [(i["due_date"], i["amount"], i["status"]) for i in purchase["installments"]] == [
-        ("2026-12-03", "109.68", "PENDING"),
-        ("2026-12-10", "109.68", "PENDING"),
-        ("2026-12-17", "109.68", "PENDING"),
-        ("2026-12-24", "109.68", "PENDING"),
+        ("2026-10-22", "102.75", "OVERDUE"),
+        ("2026-10-29", "102.75", "OVERDUE"),
+        ("2026-11-05", "102.75", "OVERDUE"),
+        ("2026-11-12", "102.75", "OVERDUE"),
     ]
+
+
+async def test_grace_weeks_chosen_by_the_store_raise_the_installments(client, setup, admin):
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, installments_count=3, grace_weeks=1),
+        headers=admin,
+    )
+
+    purchase = response.json()
+    assert response.status_code == 201
+    assert (purchase["grace_weeks"], purchase["capitalized_amount"]) == (1, "404.38")
+    assert purchase["grace_periods"] == [
+        {
+            "number": 1,
+            "end_date": "2026-10-22",
+            "opening_balance": "400.00",
+            "interest": "4.38",
+            "closing_balance": "404.38",
+        }
+    ]
+    assert [(i["due_date"], i["amount"]) for i in purchase["installments"]] == [
+        ("2026-10-29", "137.75"),
+        ("2026-11-05", "137.75"),
+        ("2026-11-12", "137.75"),
+    ]
+
+
+async def test_installments_and_grace_cannot_exceed_the_maximum_weeks(client, setup, admin):
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, installments_count=4, grace_weeks=1),
+        headers=admin,
+    )
+
+    assert (response.status_code, response.json()["code"], response.json()["field"]) == (
+        422,
+        "MAX_WEEKS_EXCEEDED",
+        "grace_weeks",
+    )
 
 
 async def test_simulation_calculates_without_saving(client, setup, admin):
@@ -103,7 +147,7 @@ async def test_simulation_calculates_without_saving(client, setup, admin):
     )
 
     assert simulated.status_code == 200
-    assert (simulated.json()["id"], simulated.json()["total"]) == (None, "438.72")
+    assert (simulated.json()["id"], simulated.json()["total"]) == (None, "411.00")
     assert full_limit.status_code == 200
 
 
@@ -258,11 +302,11 @@ async def test_purchase_and_its_schedule_are_read_back(client, setup, admin):
 
 async def test_overdue_installments_are_shown_as_overdue(client, setup, admin):
     registered = await register(client, setup, admin)
-    application.dependency_overrides[get_business_today] = lambda: date(2026, 12, 11)
+    application.dependency_overrides[get_business_today] = lambda: date(2026, 11, 1)
 
     schedule = await client.get(f"/api/v1/purchases/{registered['id']}/schedule", headers=admin)
     overdue = await client.get("/api/v1/installments?status=OVERDUE", headers=admin)
-    due_by_the_17th = await client.get("/api/v1/installments?due_before=2026-12-17", headers=admin)
+    due_by_the_5th = await client.get("/api/v1/installments?due_before=2026-11-05", headers=admin)
 
     assert [i["status"] for i in schedule.json()] == ["OVERDUE", "OVERDUE", "PENDING", "PENDING"]
     assert [(i["number"], i["purchase_id"]) for i in overdue.json()["items"]] == [
@@ -270,7 +314,7 @@ async def test_overdue_installments_are_shown_as_overdue(client, setup, admin):
         (2, registered["id"]),
     ]
     assert overdue.json()["items"][0]["customer_id"] == setup.account_id
-    assert due_by_the_17th.json()["total"] == 3
+    assert due_by_the_5th.json()["total"] == 3
 
 
 async def test_purchase_history_is_filtered(client, setup, admin):

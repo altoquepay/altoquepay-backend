@@ -20,7 +20,10 @@ class RegisterPurchaseResource(BaseModel):
     customer_id: int
     purchased_at: AwareDatetime = Field(examples=["2026-10-15T12:00:00-05:00"])
     mode: PaymentMode
-    installments_count: int | None = Field(None, examples=[4])
+    installments_count: int | None = Field(None, examples=[3])
+    # Weekly only: weeks of total grace before the installments, with nothing paid and their
+    # interest added to the balance. Installments plus grace weeks stay within the maximum weeks.
+    grace_weeks: int = Field(0, ge=0, le=99, examples=[1])
     items: list[RequestedItemResource] = Field(min_length=1, max_length=100)
 
 
@@ -57,6 +60,7 @@ class PurchaseResource(BaseModel):
     late_tea: Decimal
     term_days: int | None
     grace_days: int | None
+    grace_weeks: int | None
     capitalized_amount: Decimal | None
     weekly_rate: Decimal | None
     installments_count: int | None
@@ -68,8 +72,21 @@ class PurchaseResource(BaseModel):
     voided_by: int | None
 
 
+class GracePeriodResource(BaseModel):
+    """A week of total grace: nothing is paid and its interest is added to the balance."""
+
+    number: int
+    end_date: date
+    opening_balance: Decimal
+    interest: Decimal
+    closing_balance: Decimal
+
+
 class PurchaseDetailResource(PurchaseResource):
+    """grace_periods come before the installments, in order; empty without grace."""
+
     items: list[PurchaseItemResource]
+    grace_periods: list[GracePeriodResource]
     installments: list[InstallmentResource]
 
 

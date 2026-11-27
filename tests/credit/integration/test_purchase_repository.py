@@ -92,7 +92,7 @@ async def test_installments_are_listed_with_their_status_today(unit_of_work):
     repository = PurchaseRepositoryImpl(unit_of_work.session)
     setup = await add_credit_setup(unit_of_work)
     purchase = await add_purchase(unit_of_work, setup)
-    today = date(2026, 12, 11)  # the first two installments are past due
+    today = date(2026, 10, 30)  # the first two installments are past due
 
     overdue, overdue_total = await repository.list_installments(
         setup.store_id, InstallmentStatus.OVERDUE, None, today, 0, 10
@@ -100,17 +100,17 @@ async def test_installments_are_listed_with_their_status_today(unit_of_work):
     pending, _ = await repository.list_installments(
         setup.store_id, InstallmentStatus.PENDING, None, today, 0, 10
     )
-    due_by_the_17th, _ = await repository.list_installments(
-        setup.store_id, None, date(2026, 12, 17), today, 0, 10
+    due_by_the_5th, _ = await repository.list_installments(
+        setup.store_id, None, date(2026, 11, 5), today, 0, 10
     )
     due_in_range = await repository.list_installments_due(
-        setup.account_id, date(2026, 12, 10), date(2026, 12, 17)
+        setup.account_id, date(2026, 10, 29), date(2026, 11, 5)
     )
     entry = await repository.find_installment(purchase.installments[3].id)
 
     assert ([e.installment.number for e in overdue], overdue_total) == ([1, 2], 2)
     assert [e.installment.number for e in pending] == [3, 4]
-    assert [e.installment.number for e in due_by_the_17th] == [1, 2, 3]
+    assert [e.installment.number for e in due_by_the_5th] == [1, 2, 3]
     assert [e.installment.number for e in due_in_range] == [2, 3]
     assert (entry.purchase_id, entry.account_id, entry.installment.number) == (
         purchase.id,

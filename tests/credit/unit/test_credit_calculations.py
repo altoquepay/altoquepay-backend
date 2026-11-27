@@ -37,7 +37,7 @@ def rows_of(schedule):
 def test_report_test_1_weekly_purchase_before_the_cutoff():
     principal = capitalize(money("350.00"), TEA_75, days=11)
 
-    schedule = french_schedule(principal, TEA_75, 4, cycle_payment_date=date(2026, 9, 26))
+    schedule = french_schedule(principal, TEA_75, 4, first_period_start=date(2026, 9, 26))
 
     assert principal == money("356.04")
     assert rows_of(schedule) == [
@@ -53,7 +53,7 @@ def test_report_test_1_weekly_purchase_before_the_cutoff():
 def test_report_test_3_weekly_purchase_after_the_cutoff():
     principal = capitalize(money("400.00"), TEA_75, days=42)
 
-    schedule = french_schedule(principal, TEA_75, 4, cycle_payment_date=date(2026, 11, 26))
+    schedule = french_schedule(principal, TEA_75, 4, first_period_start=date(2026, 11, 26))
 
     assert principal == money("426.99")
     assert rows_of(schedule) == [

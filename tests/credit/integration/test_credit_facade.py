@@ -42,8 +42,8 @@ async def test_outstanding_principal_counts_unpaid_amounts_and_installment_princ
     await facade.mark_installment_paid(first_id, payment_id=payment_id)
     after = await facade.get_outstanding_principal(setup.account_id)
 
-    # 426.99 capitalized plus 200.00, then minus the first amortization of 105.01.
-    assert (before, after) == (Decimal("626.99"), Decimal("521.98"))
+    # 400.00 financed plus 200.00, then minus the first amortization of 98.37.
+    assert (before, after) == (Decimal("600.00"), Decimal("501.63"))
 
 
 async def test_installments_and_purchases_are_summarized(unit_of_work, setup):
@@ -51,22 +51,22 @@ async def test_installments_and_purchases_are_summarized(unit_of_work, setup):
     weekly = await add_purchase(unit_of_work, setup)
     single_date = await add_single_date(unit_of_work, setup)
 
-    due = await facade.get_installments_due(setup.account_id, date(2026, 12, 4), date(2026, 12, 17))
+    due = await facade.get_installments_due(setup.account_id, date(2026, 10, 23), date(2026, 11, 5))
     installment = await facade.get_installment(weekly.installments[3].id)
     purchase = await facade.get_purchase(weekly.id)
     cycle_purchases = await facade.get_cycle_purchases(weekly.cycle_id)
     account_purchases = await facade.list_purchases(setup.account_id)
 
-    assert [(i.number, i.amount) for i in due] == [(2, Decimal("109.68")), (3, Decimal("109.68"))]
+    assert [(i.number, i.amount) for i in due] == [(2, Decimal("102.75")), (3, Decimal("102.75"))]
     assert (installment.number, installment.amount, installment.account_id) == (
         4,
-        Decimal("109.68"),
+        Decimal("102.75"),
         setup.account_id,
     )
     assert (purchase.mode, purchase.tea, purchase.installment_amount) == (
         "WEEKLY",
         Decimal("75.0000000"),
-        Decimal("109.68"),
+        Decimal("102.75"),
     )
     assert [p.purchase_id for p in cycle_purchases] == [weekly.id, single_date.id]
     assert [p.purchase_id for p in account_purchases] == [single_date.id, weekly.id]
@@ -140,7 +140,7 @@ async def test_store_wide_reads_add_up_every_account_of_the_store_only(unit_of_w
 
     outstanding = await facade.get_store_outstanding_principal(setup.store_id)
     due = await facade.list_store_installments_due(
-        setup.store_id, date(2026, 12, 4), date(2026, 12, 17)
+        setup.store_id, date(2026, 10, 23), date(2026, 11, 5)
     )
     october_and_november = await facade.list_store_purchases(
         setup.store_id, date(2026, 10, 1), date(2026, 11, 30)
@@ -149,8 +149,8 @@ async def test_store_wide_reads_add_up_every_account_of_the_store_only(unit_of_w
         setup.store_id, date(2026, 11, 1), date(2026, 11, 30)
     )
 
-    # 426.99 capitalized by the weekly purchase plus 200.00 on a single date.
-    assert outstanding == Decimal("626.99")
+    # 400.00 financed by the weekly purchase plus 200.00 on a single date.
+    assert outstanding == Decimal("600.00")
     assert [(i.number, i.account_id) for i in due] == [
         (2, setup.account_id),
         (3, setup.account_id),

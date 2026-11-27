@@ -1,4 +1,4 @@
-"""The credit calculations of the report: single date interest, total grace and French schedule.
+"""The credit calculations: single date interest, weekly total grace and French schedule.
 
 Every amount is rounded to cents as soon as it is produced, so what is stored is what is charged.
 """
@@ -32,10 +32,45 @@ def capitalize(amount: Money, tea: Rate, days: int) -> Money:
     return Money(amount.amount * (1 + tep(tea, days)))
 
 
+@dataclass(frozen=True)
+class GraceRow:
+    """A week of total grace: nothing is paid and its interest is added to the balance."""
+
+    number: int
+    end_date: date
+    opening_balance: Money
+    interest: Money
+    closing_balance: Money
+
+
+def grace_schedule(amount: Money, tea: Rate, weeks: int, start: date) -> list[GraceRow]:
+    """Return the weeks of total grace from the purchase day, each adding TE7d of the balance.
+
+    Each interest is rounded to cents, as in the installments, so the rows add up exactly to
+    the balance the installments are then calculated on.
+    """
+    rate = te7d(tea)
+    rows = []
+    balance = amount.amount
+    for number in range(1, weeks + 1):
+        interest = Money(balance * rate).amount
+        rows.append(
+            GraceRow(
+                number=number,
+                end_date=start + timedelta(days=INSTALLMENT_PERIOD_DAYS * number),
+                opening_balance=Money(balance),
+                interest=Money(interest),
+                closing_balance=Money(balance + interest),
+            )
+        )
+        balance += interest
+    return rows
+
+
 def french_schedule(
-    principal: Money, tea: Rate, count: int, cycle_payment_date: date
+    principal: Money, tea: Rate, count: int, first_period_start: date
 ) -> list[ScheduleRow]:
-    """Return the constant weekly installments, the k-th due on the cycle payment date + 7k days.
+    """Return the constant weekly installments, the k-th due on first_period_start + 7k days.
 
     Each interest is rounded to cents and the amortization is the installment minus it. The last
     installment amortizes whatever is left and its interest takes the cents lost to rounding, so
@@ -59,7 +94,7 @@ def french_schedule(
         rows.append(
             ScheduleRow(
                 number=number,
-                due_date=cycle_payment_date + timedelta(days=INSTALLMENT_PERIOD_DAYS * number),
+                due_date=first_period_start + timedelta(days=INSTALLMENT_PERIOD_DAYS * number),
                 opening_balance=Money(balance),
                 interest=Money(interest),
                 amortization=Money(amortization),

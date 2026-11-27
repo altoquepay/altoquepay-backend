@@ -1,12 +1,13 @@
 from datetime import date
 
-from app.credit.domain.model.aggregates.purchase import Installment, Purchase
+from app.credit.domain.model.aggregates.purchase import Installment, PaymentMode, Purchase
 from app.credit.domain.model.commands.register_purchase_command import (
     RegisterPurchaseCommand,
     RequestedItem,
 )
 from app.credit.domain.repositories.purchase_repository import InstallmentEntry
 from app.credit.interfaces.rest.resources.purchase_resources import (
+    GracePeriodResource,
     InstallmentListItemResource,
     InstallmentResource,
     PurchaseDetailResource,
@@ -27,6 +28,7 @@ def to_register_command(
         installments_count=resource.installments_count,
         items=[RequestedItem(item.product_id, item.quantity) for item in resource.items],
         created_by=user_id,
+        grace_weeks=resource.grace_weeks,
     )
 
 
@@ -46,6 +48,16 @@ def to_detail_resource(purchase: Purchase, today: date) -> PurchaseDetailResourc
             )
             for item in purchase.items
         ],
+        grace_periods=[
+            GracePeriodResource(
+                number=row.number,
+                end_date=row.end_date,
+                opening_balance=row.opening_balance.amount,
+                interest=row.interest.amount,
+                closing_balance=row.closing_balance.amount,
+            )
+            for row in purchase.grace_rows()
+        ],
         installments=[to_installment_resource(i, today) for i in purchase.installments],
     )
 
@@ -62,6 +74,7 @@ def purchase_fields(purchase: Purchase) -> dict:
         "late_tea": purchase.late_tea.percent,
         "term_days": purchase.term_days,
         "grace_days": purchase.grace_days,
+        "grace_weeks": purchase.grace_weeks if purchase.mode == PaymentMode.WEEKLY else None,
         "capitalized_amount": amount_or_none(purchase.capitalized_amount),
         "weekly_rate": None if purchase.weekly_rate is None else purchase.weekly_rate.percent,
         "installments_count": purchase.installments_count,
