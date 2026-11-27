@@ -29,6 +29,9 @@ services:
       # Only Caddy may tell the API which IP the client has; not the whole network, whose
       # gateway is the source of requests Docker forwards from the host itself.
       FORWARDED_ALLOW_IPS: 172.28.0.10
+      # Here and not in .env, so that each deploy applies them: deploy.sh never changes .env.
+      CORS_ORIGINS: http://localhost:4200,https://altoquepay-frontend.web.app,https://altoquepay-frontend.firebaseapp.com
+      FRONTEND_URL: https://altoquepay-frontend.web.app
     depends_on:
       db:
         condition: service_healthy
