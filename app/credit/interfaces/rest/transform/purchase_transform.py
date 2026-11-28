@@ -28,7 +28,7 @@ def to_register_command(
         installments_count=resource.installments_count,
         items=[RequestedItem(item.product_id, item.quantity) for item in resource.items],
         created_by=user_id,
-        grace_weeks=resource.grace_weeks,
+        grace_weeks=tuple(resource.grace_weeks),
     )
 
 
@@ -51,6 +51,7 @@ def to_detail_resource(purchase: Purchase, today: date) -> PurchaseDetailResourc
         grace_periods=[
             GracePeriodResource(
                 number=row.number,
+                week=row.week,
                 end_date=row.end_date,
                 opening_balance=row.opening_balance.amount,
                 interest=row.interest.amount,

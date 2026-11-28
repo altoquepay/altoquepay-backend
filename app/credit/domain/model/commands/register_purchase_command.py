@@ -21,5 +21,6 @@ class RegisterPurchaseCommand:
     installments_count: int | None
     items: list[RequestedItem]
     created_by: int
-    # Weeks of total grace the store gives a weekly purchase before its installments.
-    grace_weeks: int = 0
+    # Weekly only: the weeks of the plan the store makes of total grace, counted from the
+    # purchase: at the start, between installments or none, never the last one.
+    grace_weeks: tuple[int, ...] = ()

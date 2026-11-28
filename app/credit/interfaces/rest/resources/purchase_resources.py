@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Annotated
 
 from pydantic import AwareDatetime, BaseModel, Field
 
@@ -21,9 +22,13 @@ class RegisterPurchaseResource(BaseModel):
     purchased_at: AwareDatetime = Field(examples=["2026-10-15T12:00:00-05:00"])
     mode: PaymentMode
     installments_count: int | None = Field(None, examples=[3])
-    # Weekly only: weeks of total grace before the installments, with nothing paid and their
-    # interest added to the balance. Installments plus grace weeks stay within the maximum weeks.
-    grace_weeks: int = Field(0, ge=0, le=99, examples=[1])
+    # Weekly only: the weeks of the plan that are of total grace, counted from the purchase (1 is
+    # the first week): at the start, between installments or none, never the last one. Nothing
+    # is paid in them and their interest is added to the balance. Installments plus grace weeks
+    # stay within the customer's maximum weeks.
+    grace_weeks: list[Annotated[int, Field(ge=1, le=99)]] = Field(
+        default_factory=list, max_length=98, examples=[[1, 3]]
+    )
     items: list[RequestedItemResource] = Field(min_length=1, max_length=100)
 
 
@@ -60,7 +65,8 @@ class PurchaseResource(BaseModel):
     late_tea: Decimal
     term_days: int | None
     grace_days: int | None
-    grace_weeks: int | None
+    # The weeks of the plan that are of grace; null for a single date purchase.
+    grace_weeks: list[int] | None
     capitalized_amount: Decimal | None
     weekly_rate: Decimal | None
     installments_count: int | None
@@ -76,6 +82,8 @@ class GracePeriodResource(BaseModel):
     """A week of total grace: nothing is paid and its interest is added to the balance."""
 
     number: int
+    # Its place in the plan, counted from the purchase.
+    week: int
     end_date: date
     opening_balance: Decimal
     interest: Decimal
@@ -83,7 +91,7 @@ class GracePeriodResource(BaseModel):
 
 
 class PurchaseDetailResource(PurchaseResource):
-    """grace_periods come before the installments, in order; empty without grace."""
+    """grace_periods and installments are each in order; by date they interleave as chosen."""
 
     items: list[PurchaseItemResource]
     grace_periods: list[GracePeriodResource]

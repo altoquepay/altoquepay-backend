@@ -1,5 +1,6 @@
 """A purchase on credit, with its items and, when paid weekly, its installment schedule."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -7,9 +8,8 @@ from enum import StrEnum
 
 from app.credit.domain.services.credit_calculations import (
     GraceRow,
-    french_schedule,
-    grace_schedule,
     interest_over,
+    weekly_plan,
 )
 from app.shared.domain.errors import BusinessError
 from app.shared.domain.finance import INSTALLMENT_PERIOD_DAYS, te7d
@@ -141,14 +141,16 @@ class Purchase:
         installments_count: int | None,
         max_weeks: int,
         created_by: int,
-        grace_weeks: int = 0,
+        grace_weeks: Sequence[int] = (),
     ) -> "Purchase":
         """Calculate the purchase. purchase_day is the day of purchased_at in the business zone.
 
         A single date purchase is paid on its cycle's payment date. A weekly one is financed for
-        its amount from the purchase day: grace_weeks weeks of total grace, chosen by the store,
-        add their interest to the balance, then installments_count installments follow. Both
-        together may not exceed the customer's maximum weeks.
+        its amount from the purchase day over installments_count installments plus the weeks of
+        total grace the store chose, which may not exceed the customer's maximum weeks.
+        grace_weeks are the places of those weeks in the plan, counted from the purchase: any
+        week but the last, at the start or between installments. In them nothing is paid and
+        their interest is added to the balance.
         """
         if not items:
             raise BusinessError("NO_ITEMS", "A purchase needs at least one item.", field="items")
@@ -191,31 +193,32 @@ class Purchase:
                 "A weekly purchase needs at least one installment.",
                 field="installments_count",
             )
-        if grace_weeks < 0:
-            raise BusinessError(
-                "INVALID_GRACE_WEEKS",
-                "The grace weeks cannot be negative.",
-                field="grace_weeks",
-            )
-        if installments_count + grace_weeks > max_weeks:
+        grace = sorted(set(grace_weeks))
+        weeks = installments_count + len(grace)
+        if weeks > max_weeks:
             raise BusinessError(
                 "MAX_WEEKS_EXCEEDED",
                 f"The installments and grace weeks exceed the maximum weeks of this customer "
                 f"({max_weeks}).",
-                field="grace_weeks" if grace_weeks else "installments_count",
+                field="grace_weeks" if grace else "installments_count",
                 details={"max": str(max_weeks)},
             )
-        grace = grace_schedule(purchase.amount, tea, grace_weeks, purchase_day)
-        purchase.grace_days = INSTALLMENT_PERIOD_DAYS * grace_weeks
-        purchase.capitalized_amount = grace[-1].closing_balance if grace else purchase.amount
+        if len(grace) < len(grace_weeks) or any(week < 1 or week >= weeks for week in grace):
+            raise BusinessError(
+                "INVALID_GRACE_WEEKS",
+                f"Each grace week is a different week of the plan (1 to {weeks}) other than the "
+                "last, which pays the last installment.",
+                field="grace_weeks",
+            )
+        grace_rows, schedule = weekly_plan(
+            purchase.amount, tea, installments_count, grace, purchase_day
+        )
+        purchase.grace_days = INSTALLMENT_PERIOD_DAYS * len(grace)
+        purchase.capitalized_amount = Money(
+            purchase.amount.amount + sum((row.interest.amount for row in grace_rows), Decimal(0))
+        )
         purchase.weekly_rate = Rate(te7d(tea))
         purchase.installments_count = installments_count
-        schedule = french_schedule(
-            purchase.capitalized_amount,
-            tea,
-            installments_count,
-            purchase_day + timedelta(days=purchase.grace_days),
-        )
         purchase.installments = [
             Installment(
                 row.number,
@@ -235,17 +238,50 @@ class Purchase:
         return purchase
 
     @property
-    def grace_weeks(self) -> int:
-        return (self.grace_days or 0) // INSTALLMENT_PERIOD_DAYS
+    def plan_weeks(self) -> int:
+        """Return how many weeks a weekly plan lasts: its installments and its grace weeks."""
+        return (self.installments_count or 0) + (self.grace_days or 0) // INSTALLMENT_PERIOD_DAYS
+
+    def purchase_day(self) -> date:
+        """Return the day the weekly plan starts: the last installment closes its last week."""
+        return self.installments[-1].due_date - timedelta(
+            days=INSTALLMENT_PERIOD_DAYS * self.plan_weeks
+        )
+
+    @property
+    def grace_weeks(self) -> list[int]:
+        """Return the places of the grace weeks in the plan: the weeks without an installment.
+
+        They are not stored: each installment is due at the end of its week.
+        """
+        if self.mode != PaymentMode.WEEKLY or not self.grace_days:
+            return []
+        start = self.purchase_day()
+        paid = {(i.due_date - start).days // INSTALLMENT_PERIOD_DAYS for i in self.installments}
+        return [week for week in range(1, self.plan_weeks + 1) if week not in paid]
 
     def grace_rows(self) -> list[GraceRow]:
         """Return the weeks of total grace, worked out again since they are not stored."""
-        if self.mode != PaymentMode.WEEKLY or not self.grace_weeks:
+        grace = self.grace_weeks
+        if not grace or self.installments_count is None:
             return []
-        purchase_day = self.installments[0].due_date - timedelta(
-            days=INSTALLMENT_PERIOD_DAYS * (self.grace_weeks + 1)
+        rows, _ = weekly_plan(
+            self.amount, self.tea, self.installments_count, grace, self.purchase_day()
         )
-        return grace_schedule(self.amount, self.tea, self.grace_weeks, purchase_day)
+        return rows
+
+    def accrual_start(self, installment: Installment) -> tuple[date, Money]:
+        """Return since when, and on what balance, the interest an installment pays builds up.
+
+        That is the previous installment's due date and closing balance, or the purchase day and
+        amount for the first one; grace weeks in between add to it, so it is an earlier date than
+        a week before the due date.
+        """
+        previous = [i for i in self.installments if i.number < installment.number]
+        if not previous:
+            return self.purchase_day(), self.amount
+        last = max(previous, key=lambda i: i.number)
+        return last.due_date, last.closing_balance
 
     def outstanding_principal(self) -> Money:
         """Return the principal owed: the amount, or the amortization of pending installments."""
