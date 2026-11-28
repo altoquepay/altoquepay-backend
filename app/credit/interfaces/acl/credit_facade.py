@@ -71,6 +71,14 @@ class CreditFacade:
             raise BusinessError("NOT_FOUND", "The installment does not exist.", status=404)
         return to_installment_summary(entry)
 
+    async def get_accrual_start(self, installment_id: int) -> tuple[date, Decimal]:
+        """Return since when, and on what balance, the interest of an installment builds up."""
+        purchase = await self._purchases.find_by_installment(installment_id)
+        if purchase is None:
+            raise BusinessError("NOT_FOUND", "The installment does not exist.", status=404)
+        day, balance = purchase.accrual_start(purchase.find_installment(installment_id))
+        return day, balance.amount
+
     async def get_purchase(self, purchase_id: int) -> PurchaseSummary:
         """Return a purchase, since a payment quote receives only its id."""
         return to_purchase_summary(await self._find(purchase_id))

@@ -69,6 +69,12 @@ class CreditLedger(ABC):
         """Return the pending and overdue installments of an account, by due date."""
 
     @abstractmethod
+    async def accrual_start(self, installment_id: int) -> tuple[date, Money]:
+        """Return since when, and on what balance, the interest of an installment builds up:
+        the previous installment's due date and closing balance, or the purchase day and amount.
+        Grace weeks before the installment make it earlier than a week before its due date."""
+
+    @abstractmethod
     async def cycle_purchases(self, cycle_id: int) -> list[PurchaseInfo]: ...
 
     @abstractmethod

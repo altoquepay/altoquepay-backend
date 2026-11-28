@@ -57,6 +57,10 @@ class ExternalCredit(CreditLedger):
         due = await self._credit_facade.get_installments_due(account_id, FIRST_DAY, LAST_DAY)
         return [to_installment_info(installment) for installment in due]
 
+    async def accrual_start(self, installment_id: int) -> tuple[date, Money]:
+        day, balance = await self._credit_facade.get_accrual_start(installment_id)
+        return day, Money(balance)
+
     async def cycle_purchases(self, cycle_id: int) -> list[PurchaseInfo]:
         purchases = await self._credit_facade.get_cycle_purchases(cycle_id)
         return [to_purchase_info(purchase) for purchase in purchases]

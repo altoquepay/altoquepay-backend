@@ -269,16 +269,16 @@ class PaymentService:
                 status=409,
             )
         first = pending[0]
-        # The installments run every 7 days from the cycle payment date.
-        last_due_paid = first.due_date - timedelta(days=INSTALLMENT_PERIOD_DAYS)
-        if first.number == 1 and today < last_due_paid:
-            # Still in the grace period: only the days since the purchase are charged.
-            principal = purchase.amount
-            days = (today - self._purchase_day(purchase)).days
-        else:
-            # The balance after the last installment paid, plus its interest since then.
-            principal = first.opening_balance
-            days = max((today - last_due_paid).days, 0)
+        # The week of the first installment left: its opening balance, plus its interest so far.
+        week_start = first.due_date - timedelta(days=INSTALLMENT_PERIOD_DAYS)
+        principal = first.opening_balance
+        days = max((today - week_start).days, 0)
+        if today < week_start:
+            # Still in grace weeks before it: only the days since they began are charged, on the
+            # balance they started with. Before an installment paid early, nothing is charged.
+            start, balance = await self._ledger.accrual_start(first.installment_id)
+            if today >= start:
+                principal, days = balance, (today - start).days
         ordinary = interest_for_days(principal, purchase.tea, days)
         owed = Money(sum((i.amount.amount for i in pending), Decimal(0)))
         breakdown = PaymentBreakdown(
