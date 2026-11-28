@@ -1,5 +1,6 @@
 """The store, account, product and cycle a purchase needs, saved in the session of a test."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -63,7 +64,7 @@ async def add_purchase(
     mode: PaymentMode = PaymentMode.WEEKLY,
     quantity: int = 4,
     installments_count: int = 4,
-    grace_weeks: int = 0,
+    grace_weeks: Sequence[int] = (),
 ) -> Purchase:
     """Flush a purchase of the setup's product, by default report test N°3 (S/ 400, 4 weeks)."""
     # Registered on the day of the purchase, so its cycle still takes it.

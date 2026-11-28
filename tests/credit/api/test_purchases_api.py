@@ -71,7 +71,7 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
     assert {key: purchase[key] for key in keys} == {
         "amount": "400.00",
         "grace_days": 0,
-        "grace_weeks": 0,
+        "grace_weeks": [],
         "capitalized_amount": "400.00",
     }
     assert (purchase["weekly_rate"], purchase["installment_amount"]) == ("1.0940836", "102.75")
@@ -97,16 +97,17 @@ async def test_weekly_purchase_follows_report_test_3(client, setup, admin):
 async def test_grace_weeks_chosen_by_the_store_raise_the_installments(client, setup, admin):
     response = await client.post(
         "/api/v1/purchases",
-        json=report_test_3(setup, installments_count=3, grace_weeks=1),
+        json=report_test_3(setup, installments_count=3, grace_weeks=[1]),
         headers=admin,
     )
 
     purchase = response.json()
     assert response.status_code == 201
-    assert (purchase["grace_weeks"], purchase["capitalized_amount"]) == (1, "404.38")
+    assert (purchase["grace_weeks"], purchase["capitalized_amount"]) == ([1], "404.38")
     assert purchase["grace_periods"] == [
         {
             "number": 1,
+            "week": 1,
             "end_date": "2026-10-22",
             "opening_balance": "400.00",
             "interest": "4.38",
@@ -123,13 +124,47 @@ async def test_grace_weeks_chosen_by_the_store_raise_the_installments(client, se
 async def test_installments_and_grace_cannot_exceed_the_maximum_weeks(client, setup, admin):
     response = await client.post(
         "/api/v1/purchases",
-        json=report_test_3(setup, installments_count=4, grace_weeks=1),
+        json=report_test_3(setup, installments_count=4, grace_weeks=[1]),
         headers=admin,
     )
 
     assert (response.status_code, response.json()["code"], response.json()["field"]) == (
         422,
         "MAX_WEEKS_EXCEEDED",
+        "grace_weeks",
+    )
+
+
+async def test_a_grace_week_can_go_between_installments(client, setup, admin):
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, installments_count=3, grace_weeks=[2]),
+        headers=admin,
+    )
+
+    purchase = response.json()
+    assert response.status_code == 201
+    assert purchase["grace_weeks"] == [2]
+    assert [(g["week"], g["end_date"], g["interest"]) for g in purchase["grace_periods"]] == [
+        (2, "2026-10-29", "2.93")
+    ]
+    assert [(i["due_date"], i["amount"]) for i in purchase["installments"]] == [
+        ("2026-10-22", "136.26"),
+        ("2026-11-05", "137.75"),
+        ("2026-11-12", "137.75"),
+    ]
+
+
+async def test_the_last_week_cannot_be_of_grace(client, setup, admin):
+    response = await client.post(
+        "/api/v1/purchases",
+        json=report_test_3(setup, installments_count=3, grace_weeks=[4]),
+        headers=admin,
+    )
+
+    assert (response.status_code, response.json()["code"], response.json()["field"]) == (
+        422,
+        "INVALID_GRACE_WEEKS",
         "grace_weeks",
     )
 

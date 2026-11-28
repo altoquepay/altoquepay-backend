@@ -224,13 +224,29 @@ async def test_full_prepayment_in_the_grace_weeks_charges_the_days_since_the_pur
     client, admin, setup, unit_of_work
 ):
     # 1 week of grace, then 3 installments of 137.75 from 29/10.
-    graced = await add_purchase(unit_of_work, setup, installments_count=3, grace_weeks=1)
+    graced = await add_purchase(unit_of_work, setup, installments_count=3, grace_weeks=[1])
     on(date(2026, 10, 20))
 
     quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=graced.id)
 
     assert amounts(quoted.json()) == ("0.00", "3.12", "400.00", "403.12", "10.13")
     assert quoted.json()["interest_days"] == 5
+
+
+async def test_full_prepayment_in_a_grace_week_between_installments_charges_only_its_days(
+    client, admin, setup, unit_of_work
+):
+    # Week 1 pays 136.26 and leaves 268.12; week 2, from 22/10 to 29/10, is of grace.
+    graced = await add_purchase(unit_of_work, setup, installments_count=3, grace_weeks=[2])
+    on(date(2026, 10, 22))
+    await pay(client, admin, "136.26", kind="INSTALLMENT", installment_id=graced.installments[0].id)
+    on(date(2026, 10, 25))
+
+    quoted = await quote(client, admin, kind="FULL_PREPAYMENT", purchase_id=graced.id)
+
+    # The 268.12 left plus 3 days of interest, not the whole grace week already added to it.
+    assert amounts(quoted.json()) == ("0.00", "1.25", "268.12", "269.37", "6.13")
+    assert quoted.json()["interest_days"] == 3
 
 
 async def test_full_prepayment_is_rejected_with_an_overdue_installment(client, admin, weekly):

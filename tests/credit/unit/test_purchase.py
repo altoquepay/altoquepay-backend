@@ -16,7 +16,9 @@ from app.shared.domain.errors import BusinessError
 from app.shared.domain.value_objects import Money, Rate
 
 
-def register(mode=PaymentMode.WEEKLY, installments_count=4, max_weeks=8, items=None, grace_weeks=0):
+def register(
+    mode=PaymentMode.WEEKLY, installments_count=4, max_weeks=8, items=None, grace_weeks=()
+):
     """Report test N°3: S/ 400 bought on 15/10/2026, in the cycle paid on 26/11/2026."""
     purchase = Purchase.register(
         store_id=1,
@@ -44,7 +46,7 @@ def test_weekly_purchase_finances_its_amount_from_the_purchase_day():
 
     # No interest is added before the first week: what is financed is what was bought.
     assert purchase.amount == Money(Decimal("400"))
-    assert (purchase.grace_days, purchase.grace_weeks, purchase.term_days) == (0, 0, None)
+    assert (purchase.grace_days, purchase.grace_weeks, purchase.term_days) == (0, [], None)
     assert purchase.capitalized_amount == Money(Decimal("400"))
     assert purchase.weekly_rate.percent.quantize(Decimal("0.0000001")) == Decimal("1.0940836")
     assert purchase.installment_amount == Money(Decimal("102.75"))
@@ -60,11 +62,11 @@ def test_weekly_purchase_finances_its_amount_from_the_purchase_day():
 
 
 def test_grace_weeks_add_their_interest_and_raise_the_installments():
-    purchase = register(installments_count=3, grace_weeks=1)
+    purchase = register(installments_count=3, grace_weeks=[1])
 
     # Week 1 pays nothing and adds 400 x TE7d = 4.38; the 4-week term stays, so the 3
     # installments are higher than without grace.
-    assert (purchase.grace_days, purchase.grace_weeks) == (7, 1)
+    assert (purchase.grace_days, purchase.grace_weeks) == (7, [1])
     assert purchase.capitalized_amount == Money(Decimal("404.38"))
     assert purchase.installment_amount == Money(Decimal("137.75"))
     assert [i.due_date for i in purchase.installments] == [
@@ -73,7 +75,7 @@ def test_grace_weeks_add_their_interest_and_raise_the_installments():
         date(2026, 11, 12),
     ]
     (grace,) = purchase.grace_rows()
-    assert (grace.number, grace.end_date) == (1, date(2026, 10, 22))
+    assert (grace.number, grace.week, grace.end_date) == (1, 1, date(2026, 10, 22))
     assert (grace.opening_balance, grace.interest, grace.closing_balance) == (
         Money(Decimal("400")),
         Money(Decimal("4.38")),
@@ -81,9 +83,55 @@ def test_grace_weeks_add_their_interest_and_raise_the_installments():
     )
 
 
+def test_a_grace_week_between_installments_raises_the_installments_after_it():
+    purchase = register(installments_count=3, grace_weeks=[2])
+
+    # Week 1 pays the first of 3 installments; week 2 pays nothing and adds 268.12 x TE7d = 2.93;
+    # weeks 3 and 4 pay the 271.05 left in 2 equal installments, higher than the first.
+    assert (purchase.grace_days, purchase.grace_weeks) == (7, [2])
+    assert [
+        (i.due_date, i.opening_balance.amount, i.amount.amount, i.closing_balance.amount)
+        for i in purchase.installments
+    ] == [
+        (date(2026, 10, 22), Decimal("400.00"), Decimal("136.26"), Decimal("268.12")),
+        (date(2026, 11, 5), Decimal("271.05"), Decimal("137.75"), Decimal("136.27")),
+        (date(2026, 11, 12), Decimal("136.27"), Decimal("137.75"), Decimal("0.00")),
+    ]
+    (grace,) = purchase.grace_rows()
+    assert (grace.week, grace.end_date, grace.opening_balance, grace.interest) == (
+        2,
+        date(2026, 10, 29),
+        Money(Decimal("268.12")),
+        Money(Decimal("2.93")),
+    )
+    assert purchase.capitalized_amount == Money(Decimal("402.93"))
+    assert purchase.ordinary_interest == Money(Decimal("8.83"))
+    assert purchase.total == Money(Decimal("411.76"))
+
+
+def test_grace_weeks_can_be_at_the_start_and_between_installments():
+    purchase = register(installments_count=2, grace_weeks=[3, 1])
+
+    assert purchase.grace_weeks == [1, 3]
+    assert [(row.week, row.closing_balance) for row in purchase.grace_rows()] == [
+        (1, Money(Decimal("404.38"))),
+        (3, Money(Decimal("205.51"))),
+    ]
+    assert [i.due_date for i in purchase.installments] == [date(2026, 10, 29), date(2026, 11, 12)]
+    assert purchase.installments[-1].closing_balance == Money(Decimal("0"))
+
+
+def test_an_installment_accrues_from_the_one_before_it_across_the_grace_weeks():
+    purchase = register(installments_count=3, grace_weeks=[2])
+    first, second, _ = purchase.installments
+
+    assert purchase.accrual_start(first) == (date(2026, 10, 15), Money(Decimal("400")))
+    assert purchase.accrual_start(second) == (date(2026, 10, 22), Money(Decimal("268.12")))
+
+
 @pytest.mark.parametrize(
     ("count", "grace", "field"),
-    [(3, 2, "grace_weeks"), (6, 0, "installments_count")],
+    [(3, [1, 2], "grace_weeks"), (6, [], "installments_count")],
 )
 def test_installments_and_grace_weeks_stay_within_the_maximum_weeks(count, grace, field):
     with pytest.raises(BusinessError) as error:
@@ -94,9 +142,15 @@ def test_installments_and_grace_weeks_stay_within_the_maximum_weeks(count, grace
 
 @pytest.mark.parametrize(
     ("mode", "count", "grace"),
-    [(PaymentMode.SINGLE_DATE, None, 1), (PaymentMode.WEEKLY, 2, -1)],
+    [
+        (PaymentMode.SINGLE_DATE, None, [1]),
+        # The plan lasts 3 weeks: the last one pays the last installment.
+        (PaymentMode.WEEKLY, 2, [3]),
+        (PaymentMode.WEEKLY, 2, [0]),
+        (PaymentMode.WEEKLY, 3, [1, 1]),
+    ],
 )
-def test_grace_weeks_are_weekly_and_not_negative(mode, count, grace):
+def test_grace_weeks_are_weekly_different_and_before_the_last_week(mode, count, grace):
     with pytest.raises(BusinessError) as error:
         register(mode=mode, installments_count=count, grace_weeks=grace)
 
